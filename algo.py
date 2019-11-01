@@ -20,12 +20,14 @@ parser.add_argument('-q', '--quiet', dest='logging_level', const=60, action='sto
 parser.add_argument('-v', '--verbose', dest='logging_level', const=logging.INFO, action='store_const', help='more detailed info about testing shown')
 parser.add_argument('-d', '--debug', dest='logging_level', const=logging.DEBUG, action='store_const', help='very detailed messages of script\'s inner workings')
 
-cflags=['-O2','-g','-std=c++17','-lm','-pedantic']
+cflags=['-O2','-g','-std=c++17','-lm','-pedantic','-DALGME']
 ext='.cpp'
 script_path = dirname(realpath(__file__))
 working_directory = os.getcwd()
 algo_config_folder = join(script_path, '.config')
-def_file = '_def.toml'
+def_file = 'def.toml'
+problem_search_location = realpath(join(script_path, '..', 'acm-problems/problems'))
+statistics_file_name = 'time.cls'
 
 def main():
     setup_logging()
@@ -46,8 +48,8 @@ def main():
         return 1
     problem_folder = dirname(problem_def_path)
     global data_path, build_path
-    data_path=join(problem_folder, "_tmp", "data")
-    build_path=join(problem_folder, "_tmp", "build")
+    data_path=join(problem_folder, ".tmp", "data")
+    build_path=join(problem_folder, ".tmp", "build")
 
     # if no testing will take place, print the problem, input, and output definition, and exit
 
@@ -70,7 +72,7 @@ def main():
         logger.info('Searching for solutions; the ' + args.problem_id + ' is solved in:')
         problem_flag = 'solves ' + args.problem_id
         found = []
-        for cpp_file_path in glob.iglob('*.cpp', recursive=True):
+        for cpp_file_path in glob.glob('*.cpp', recursive=True):
             with open(cpp_file_path) as cpp_file:
                 if problem_flag in cpp_file.read():
                     found.append(cpp_file_path)
@@ -78,7 +80,7 @@ def main():
         solutions.extend([Solution(f) for f in found])
     if len(solutions) == 0:
         # should not be a problem when debugging the problem definition with only referential solution
-        logger.error('There is no solution for the probelm ' + args.problem_id)
+        logger.error('You supplied no solution for problem ' + args.problem_id)
         return 1
 
     for solution in solutions:
@@ -88,15 +90,15 @@ def main():
 
     # prepare code correctness checking mechanism variables
     # generates input datasets
-    generators = get_file_or_folder(problem_folder, '_gen')
+    generators = get_file_or_folder(problem_folder, 'gen')
     # gets the input and determines if it matches the problem definition
-    validators = get_file_or_folder(problem_folder, '_val')
+    validators = get_file_or_folder(problem_folder, 'val')
     # gets the input and contestant's output and checks that the output is correct
-    judge = get_file_or_folder(problem_folder, '_jud')
+    judge = get_file_or_folder(problem_folder, 'jud')
     # referential solution used to produce correct output to compare with
-    referential_solution = get_file_or_folder(problem_folder, '_sol')
+    referential_solution = get_file_or_folder(problem_folder, 'sol')
     # compares one solution against referential solution if it is correct
-    checker = get_file_or_folder(problem_folder, '_chk')
+    checker = get_file_or_folder(problem_folder, 'chk')
 
     logger.info('This problem has:')
     if generators: logger.info('generators: ' + str(len(generators)))
@@ -125,79 +127,76 @@ def main():
         dataset.get_testcases(args.testcase_regex)
         logger.debug('generator_file output folder: ' + dataset.data_folder)
 
-    # run all solutions on all the datasets
+    if validators:
+        for validator in validators:
+            if not validator.compile():
+                return 1
+        logger.info('Testing validity of testcases')
+        for dataset in datasets:
+            for testcase in dataset.testcases:
+                if validators:
+                    for validator in validators:
+                        if validator.run([], testcase.input) != 0:
+                            logger.error('Testcase ' + dataset.name + "/" + testcase.name + ' is INVALID, according to validator ' + validator.name)
+                            return 1
+        logger.info('All testcases were validated successfully')
+
+    logger.info('Running test on solutions')
     for dataset in datasets:
-        logger.info('testing dataset ' + dataset.name)
+        logger.info('Dataset ' + dataset.name)
         for testcase in dataset.testcases:
-            testcase_path = ''
-            testcase_name = bare_filename(testcase_path)
-            testcase_output = ''
-            print('Testcase: ' + testcase_name)
-            valid_testcase = True
-            if validators:
-                for validator in validators:
-                    validator.compile()
-                    if validator.run(['']) != 0:
-                        valid_testcase = False
-                        print(' is INVALID')
-                    # output=$("$validator" <"$testcase_path")
-                    # if result invalid - stop all and report; if valid continue
-                    print(' is VALID')
-            if valid_testcase:
-                for solution in solutions:
-                    # todo proper folder and file names
-                    executable_name=bare_filename(solution.solution_exe)
-                    executable_out_dir=''
-                    executable_out=join(executable_out_dir, testcase_name)
-                    os.makedirs(executable_out_dir, exist_ok=True)
-                    output = ''
-                    time_result_file=join(executable_out_dir, 'time.cls')
-                    # todo check the error output for other lines than time
-                    solution.run([])
-                    # output=$(/usr/bin/time -f '%U' "$executable" < "$testcase_path" > "$executable_out" 2>"$time_result_file")
-                    # time_result="$(cat "$time_result_file")"
-                    # todo get result of the program
+            logger.info('Testcase: ' + testcase.name)
+            for solution in solutions:
+                # todo proper folder and file names
+                solution_out_dir=join(dataset.data_folder, 'sol', solution.name)
+                os.makedirs(solution_out_dir, exist_ok=True)
+                solution_testcase_out=join(solution_out_dir, testcase.name)
+                time_result_file=join(solution_out_dir, statistics_file_name)
+                # todo check the error output for other lines than time
+                solution.run([])
+                # output=$(/usr/bin/time -f '%U' "$executable" < "$testcase.input" > "$solution_testcase_out" 2>"$time_result_file")
+                # time_result="$(cat "$time_result_file")"
+                # todo get result of the program
+                # result="$?"
+                if result != 0:
+                    logger.info('The program returned ' + result + ' and output >>>')
+                    subprocess.run(['cat', solution_testcase_out])
+                    logger.info('<<<')
+                    continue
+                result=88
+                if mechanism == 'judge':
+                    pass
+                    # output=$("$judge" "$testcase.input" "$solution_testcase_out")
                     # result="$?"
-                    if result != 0:
-                        print("The solution encountered ERROR")
-                        logger.info('The program returned ' + result + ' and output >>>')
-                        # logger.info('$(cat "$executable_out")')
-                        logger.info('<<<')
-                        continue
-                    result=88
-                    if mechanism == 'judge':
-                        pass
-                        # output=$("$judge" "$testcase_path" "$executable_out")
-                        # result="$?"
-                    elif mechanism == 'checker':
-                        pass
-                        # todo if testcase_output does not exist
-                        # "$referential_solution" < "$testcase_path" > "$testcase_out"
-                        # output=$("$checker" "$testcase_out" "$executable_out")
-                        # result="$?"
-                    else:
-                        logger.error('invalid checking mechanism')
-                        continue
-                    if result == 0:
-                        logger.warning('OK')
-                    elif result == 1:
-                        logger.error('WRONG ANSWER')
-                    elif result == 2:
-                        logger.error('PRESENTATION ERROR')
-                    elif result == 88:
-                        logger.error('invocation failed')
-                    else:
-                        logger.error('result gave invalid return code: ' + result)
-                    # todo
-                    print("$executable_name: $result_str ($time_result)")
-                    if result != 0:
-                        bad_files[executable_name].append(testcase_name)
-                        logger.info('Input:')
-                        logger.info(testcase_path)
-                        logger.info('Output:')
-                        logger.info(executable_out)
-                    if output != '':
-                        print(output)
+                elif mechanism == 'checker':
+                    pass
+                    # todo if testcase.correct_output does not exist
+                    # "$referential_solution" < "$testcase.input" > "$testcase_out"
+                    # output=$("$checker" "$testcase_out" "$solution_testcase_out")
+                    # result="$?"
+                else:
+                    logger.error('invalid checking mechanism')
+                    continue
+                if result == 0:
+                    logger.warning('OK')
+                elif result == 1:
+                    logger.error('WRONG ANSWER')
+                elif result == 2:
+                    logger.error('PRESENTATION ERROR')
+                elif result == 88:
+                    logger.error('invocation failed')
+                else:
+                    logger.error('result gave invalid return code: ' + result)
+                # todo
+                print("$executable_name: $result_str ($time_result)")
+                if result != 0:
+                    bad_files[executable_name].append(testcase.name)
+                    logger.info('Input:')
+                    logger.info(testcase.input)
+                    logger.info('Output:')
+                    logger.info(solution_testcase_out)
+                if output != '':
+                    print(output)
     print('Summary')
     for executable in executables:
         executable_name = ''
@@ -217,14 +216,32 @@ class Program:
         self.exe = compile_src(self.source_file, build_path)
         # todo check is compilation went ok, if not stop the program execution and raise error
         return True
-    def run(self, args, stdin=None, stdout=None, stderr=None):
-        res = subprocess.run([self.exe] + args)
-        logger.debug('program run returns: ' + str(res))
+    def run(self, args=[], input_file=None, output_file=None, timeout=None):
+        in_file = None
+        if input_file: in_file = open(input_file)
+        out_file = None
+        if output_file: out_file = open(output_file, 'w')
+        p = subprocess.Popen([self.exe] + args, stdin=in_file, stdout=out_file)
+        p.wait()
+        if out_file: out_file.flush()
+        logger.debug('program run returns: ' + str(p.returncode))
+        return p.returncode
 
 class Solution(Program):
     def __init__(self, solution_file):
         super().__init__(solution_file)
-        self.bad_cases = []
+        self.bad_testcases = []
+
+class Testcase:
+    def __init__(self, testcase_input_file, dataset):
+        self.input = testcase_input_file
+        self.dataset = dataset
+        self.name = bare_filename(self.input)
+        self.correct_output = join(dirname(testcase_input_file), self.name, '.out')
+        self.valid = True
+
+    def test(self, input_file):
+        pass
 
 class Dataset:
     def __init__(self, generator_program):
@@ -241,7 +258,7 @@ class Dataset:
     def get_testcases(self, testcase_regex):
         if testcase_regex is None:
             testcase_regex = "*"
-        self.testcases = list(glob.iglob(join(self.data_folder, testcase_regex + '.in')))
+        self.testcases = [Testcase(x, self) for x in list(glob.glob(join(self.data_folder, testcase_regex + '.in')))]
         logger.info('found ' + str(len(self.testcases)) + ' testcases')
 
 # configuration
@@ -271,7 +288,7 @@ def get_file_or_folder(problem_folder, base_name):
     if exists(base_file_path):
         return [Program(base_file_path)]
     elif exists(base_folder_path):
-        return [Program(x) for x in list(glob.iglob(join(base_folder_path, '*.cpp')))]
+        return [Program(x) for x in list(glob.glob(join(base_folder_path, '*.cpp')))]
     return None
 
 def compile_src(src_file, build_path):
@@ -287,11 +304,18 @@ def compile_src(src_file, build_path):
 
 def find_problem(problem_id):
     logger.info('PROBLEM ID: ' + problem_id)
+    # search in working directory
     location_path = join(working_directory, problem_id)
     definition_path = join(location_path, def_file)
     if exists(location_path) and exists(definition_path):
         logger.debug('problem found locally in ' + location_path)
         return location_path
+    # serach in default problem repository location
+    repository_path_regex = join(problem_search_location, "**", problem_id, def_file)
+    logger.debug('repository_path_regex: ' + repository_path_regex)
+    for cpp_file_path in glob.glob(repository_path_regex, recursive=True):
+        # todo if found more problem, raise warning or error
+        return cpp_file_path
     return None
 
 def hash_file(file_location):

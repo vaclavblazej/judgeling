@@ -4,18 +4,19 @@
 
 First, download this repository by running
 ```
-git clone <todo>
+git clone https://gitlab.fit.cvut.cz/acm/acm-algo.git
 ```
-<!--todo-->
 
 Now, you can add a symbolic link to `./algo.sh` to your path, e.g. `~/bin`, so that you can run this script from any location.
+```
+ln -s acm-algo/algo.py ~/bin/algo
+```
 
 ## Basic usage
 
 To test your code run:
-
 ```
-./algo.sh -p [<problem id>] [<code.cpp>]
+algo -P PROBLEM_ID -S [SOLUTION.cpp ...]
 ```
 
 <!--todo-->
@@ -41,14 +42,11 @@ segment_tree: OK
 segment_tree: Errors in ./test0001.in
 ```
 
-Valid for a testcase means that the input is compliant to the problem definition.
-After that for each testcase there is an output for each supplied solution with its name and result formatted as `segment_tree: OK`.
-
-You will see which of the testcases were failed and possibly some additional information from the checker/comparator to help with debugging.
-To test against them specifically use the following (searches for the name with grep):
+You will see which of the testcases were failed and possibly some additional information from the checker/judge to help with debugging.
+To test against them specifically use dataset regex `-D` and testcase regex `-C`.
 
 ```
-r -D basic -C 0001 -p segment_tree segment_tree.cpp
+algo -D basic -C 001 -P segment_tree -S segment_tree.cpp
 ```
 
 ## Advanced usage
@@ -58,7 +56,11 @@ r -D basic -C 0001 -p segment_tree segment_tree.cpp
 You may test your program in several various ways depending on how much you entangle your solution to the problem.
 
 1. Basic level - simply load input, solve, print output; measures: total speed, total code complexity
-2. (todo) Measurement tools - you make few additional calls to the algo library; measures: speed of various algorithm parts, algorithm code complexity; keep your code compilable without these tools using `#ifdef ALGME`.
+2. (todo) Measurement tools - you make few additional calls to the algo library; measures: speed of various algorithm parts, algorithm code complexity.
+
+#### Changing solution to allow more precise measurements
+
+; keep your code compilable without these tools using `#ifdef ALGME`
 
 ### Problem definition structure
 The folder/file structure in problems folder represents the primary categorization of each problem. The problem definition with its input/output definition to solve it
@@ -72,9 +74,51 @@ The folder/file structure in problems folder represents the primary categorizati
 * solution - referential solution which is assumed to be correct
 
 ```
-algorithm
-    _gen.cpp
-    _val.cpp
-    _jud.cpp
+<problem_name>
+    def.toml
+    gen
+    val
+    jud
+    chk
+    sol
+```
+
+Each part can be either a cpp file directly, or a directory containing several cpp files.
+
+### Problem temporary files
+
+All files are compiled into a temporary folder `.tmp` in the `<problem_name>` folder.
+The structure is as follows.
+
+```
+<problem_name>
+    .tmp
+        build
+            <executable of gengenerator 1>
+            <executable of gengenerator 2>
+            <executable of validator>
+            <executable of solution 1>
+            <executable of solution 2>
+            ...
+        data
+            sol
+                <solution name 1>
+                    <output for testcase 1>
+                    <output for testcase 2>
+                    ...
+                <solution name 2>
+                    <output for testcase 1>
+                    <output for testcase 2>
+                    ...
+                ...
+            <dataset 1>
+                <testcase 1>
+                <testcase 2>
+                <testcase 3>
+                ...
+            <dataset 2>
+            ...
+    gen
+    ...
 ```
 
