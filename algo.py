@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# if possible keep this file under 1000 lines
+# if possible, keep this file under 1000 lines
 
 # option to define dataset size ?
 # list problem command ?
@@ -8,19 +8,24 @@
 # simplification of testcases to find small bad testcase ?
 
 import os, sys, argparse, logging, glob, subprocess, random, re, hashlib
+import resource # unix specific, for measuring time, see https://stackoverflow.com/questions/16701310/get-how-much-time-python-subprocess-spends/16701365
 from os.path import * # frequent functions: join, exists, dirname, realpath, etc.
 
+VERBOSE_LEVEL = 15
+ALL_LEVEL = 60
 parser = argparse.ArgumentParser(description='Test algorithm implementations against problem definitions')
 parser.add_argument('-P', '--problem', dest='problem_id', help='problem definition to be run')
 parser.add_argument('-S', '--solution', dest='solution', nargs='+', help='user\'s files with his own solutions to the problem')
 parser.add_argument('-D', '--dataset', dest='dataset_regex', const='test', action='store_const', help='a dataset of testcases which should be run')
 parser.add_argument('-T', '--testcase', dest='testcase_regex', const='test', action='store_const', help='testcase which should be run')
 parser.add_argument('-s', '--scan', dest='scan', action='store_true', help='scan current folder for files solving the problem')
-parser.add_argument('-q', '--quiet', dest='logging_level', const=60, action='store_const', help='no output will be shown')
-parser.add_argument('-v', '--verbose', dest='logging_level', const=logging.INFO, action='store_const', help='more detailed info about testing shown')
+parser.add_argument('-q', '--quiet', dest='logging_level', const=ALL_LEVEL, action='store_const', help='no output will be shown')
+parser.add_argument('-v', '--verbose', dest='logging_level', const=VERBOSE_LEVEL, action='store_const', help='more detailed info about testing shown')
 parser.add_argument('-d', '--debug', dest='logging_level', const=logging.DEBUG, action='store_const', help='very detailed messages of script\'s inner workings')
+parser.add_argument('--version', dest='version', action='store_true', help='prints out version information')
 
-cflags=['-O2','-g','-std=c++17','-lm','-pedantic','-DALGME']
+preprocessor_flag='ALGME'
+cflags=['-O2', '-g', '-std=c++17', '-lm', '-pedantic', '-D'+preprocessor_flag]
 ext='.cpp'
 script_path = dirname(realpath(__file__))
 working_directory = os.getcwd()
@@ -28,19 +33,28 @@ algo_config_folder = join(script_path, '.config')
 def_file = 'def.toml'
 problem_search_location = realpath(join(script_path, '..', 'acm-problems/problems'))
 statistics_file_name = 'time.cls'
+version = '0.1.0'
+
+# == Main Logic ==================================================================
 
 def main():
     setup_logging()
     args = parser.parse_args()
+    if not args.logging_level: 
+        args.logging_level = logging.INFO
     if args.logging_level: logger.setLevel(args.logging_level)
     configure()
+    # todo print configuration
     logger.debug('SCRIPT FOLDER: ' + script_path)
     logger.debug('WORKING DIRECTORY: ' + working_directory)
     logger.debug('arguments: ' + str(sys.argv))
 
-    # translate the problem_id into the location of the problem definition
+    if args.version:
+        print('algo version ' + version)
+        return 0
+
     if args.problem_id is None:
-        print('Problem ID was not supplied!')
+        logger.error('Problem ID was not supplied!')
         return 0
     problem_def_path = find_problem(args.problem_id)
     if not problem_def_path:
@@ -79,7 +93,7 @@ def main():
         logger.info('scan for ' + problem_flag + ' found ' + str(len(found)) + ' solutions')
         solutions.extend([Solution(f) for f in found])
     if len(solutions) == 0:
-        # should not be a problem when debugging the problem definition with only referential solution
+        # not having a solution should not be an issue when debugging the problem definition with only referential solution
         logger.error('You supplied no solution for problem ' + args.problem_id)
         return 1
 
@@ -94,32 +108,33 @@ def main():
     # gets the input and determines if it matches the problem definition
     validators = get_file_or_folder(problem_folder, 'val')
     # gets the input and contestant's output and checks that the output is correct
-    judge = get_file_or_folder(problem_folder, 'jud')
+    judges = get_file_or_folder(problem_folder, 'jud')
     # referential solution used to produce correct output to compare with
-    referential_solution = get_file_or_folder(problem_folder, 'sol')
+    referential_solutions = get_file_or_folder(problem_folder, 'sol')
     # compares one solution against referential solution if it is correct
-    checker = get_file_or_folder(problem_folder, 'chk')
+    checkers = get_file_or_folder(problem_folder, 'chk')
 
-    logger.info('This problem has:')
-    if generators: logger.info('generators: ' + str(len(generators)))
-    if validators: logger.info('validators: ' + str(len(validators)))
-    if judge: logger.info('judges: ' + str(len(judge)))
-    if referential_solution: logger.info('referential_solutions: ' + str(len(referential_solution)))
-    if checker: logger.info('checkers: ' + str(len(checker)))
+    logger.verbose('This problem has:')
+    if generators: logger.verbose('generators: ' + str(len(generators)))
+    if validators: logger.verbose('validators: ' + str(len(validators)))
+    if judges: logger.verbose('judges: ' + str(len(judges)))
+    if referential_solutions: logger.verbose('referential_solutions: ' + str(len(referential_solutions)))
+    if checkers: logger.verbose('checkers: ' + str(len(checkers)))
 
-    mechanism = determine_checking_mechanism(judge, checker, referential_solution)
+    mechanism = determine_checking_mechanism(judges, checkers, referential_solutions)
     if not mechanism:
         logger.error('There is no checking mechanism')
         logger.error('Create either judge or checker (with referential solution)')
-        return 0
-    logger.info('The checking mechanism is: ' + mechanism)
+        return 1
+    logger.verbose('The checking mechanism is: ' + mechanism)
+
     datasets = [Dataset(g) for g in generators]
     if args.dataset_regex:
         datasets = [d for d in datasets if re.search(args.dataset_regex, d.name)]
     random.seed()
     global seed
     seed = random.randint(0,1e12)
-    logger.info('Seed: ' + str(seed))
+    logger.verbose('Seed: ' + str(seed))
     for dataset in datasets:
         # todo input flag to force dataset generation
         # todo hash problem definition, if changed -> generate dataset again
@@ -127,58 +142,47 @@ def main():
         dataset.get_testcases(args.testcase_regex)
         logger.debug('generator_file output folder: ' + dataset.data_folder)
 
-    if validators:
-        for validator in validators:
-            if not validator.compile():
-                return 1
-        logger.info('Testing validity of testcases')
-        for dataset in datasets:
-            for testcase in dataset.testcases:
-                if validators:
-                    for validator in validators:
-                        if validator.run([], testcase.input) != 0:
-                            logger.error('Testcase ' + dataset.name + "/" + testcase.name + ' is INVALID, according to validator ' + validator.name)
-                            return 1
-        logger.info('All testcases were validated successfully')
+    if judges:
+        for judge in judges:
+            judge.compile()
 
-    logger.info('Running test on solutions')
+    if not validate_testcases(validators, datasets):
+        return 1
+
+    logger.info('Running datasets on solutions')
     for dataset in datasets:
         logger.info('Dataset ' + dataset.name)
         for testcase in dataset.testcases:
             logger.info('Testcase: ' + testcase.name)
             for solution in solutions:
-                # todo proper folder and file names
-                solution_out_dir=join(dataset.data_folder, 'sol', solution.name)
+                solution_out_dir = join(dataset.data_folder, 'sol', solution.name)
                 os.makedirs(solution_out_dir, exist_ok=True)
-                solution_testcase_out=join(solution_out_dir, testcase.name)
-                time_result_file=join(solution_out_dir, statistics_file_name)
-                # todo check the error output for other lines than time
-                solution.run([])
-                # output=$(/usr/bin/time -f '%U' "$executable" < "$testcase.input" > "$solution_testcase_out" 2>"$time_result_file")
-                # time_result="$(cat "$time_result_file")"
-                # todo get result of the program
-                # result="$?"
-                if result != 0:
+                solution_testcase_out = join(solution_out_dir, testcase.name + '.out')
+                time_result_file = join(solution_out_dir, statistics_file_name)
+                time_limit_seconds = 10
+                # todo add precise time measurements
+                solution.timer.start()
+                if solution.run([], testcase.input, solution_testcase_out, time_limit_seconds) != 0:
                     logger.info('The program returned ' + result + ' and output >>>')
                     subprocess.run(['cat', solution_testcase_out])
                     logger.info('<<<')
+                    solution.timer.stop()
                     continue
-                result=88
+                solution.timer.stop()
+                result = 88
                 if mechanism == 'judge':
-                    pass
-                    # output=$("$judge" "$testcase.input" "$solution_testcase_out")
-                    # result="$?"
+                    judge = judges[0]
+                    result = judge.run([testcase.input, solution_testcase_out])
                 elif mechanism == 'checker':
-                    pass
-                    # todo if testcase.correct_output does not exist
-                    # "$referential_solution" < "$testcase.input" > "$testcase_out"
-                    # output=$("$checker" "$testcase_out" "$solution_testcase_out")
-                    # result="$?"
+                    checker = checkers[0]
+                    if not testcase.correct_output:
+                        referential_solutions[0].run([], testcase.input, testcase.correct_output)
+                    result = checker.run([], testcase.correct_output, solution_testcase_out)
                 else:
                     logger.error('invalid checking mechanism')
                     continue
                 if result == 0:
-                    logger.warning('OK')
+                    logger.verbose('OK')
                 elif result == 1:
                     logger.error('WRONG ANSWER')
                 elif result == 2:
@@ -186,27 +190,23 @@ def main():
                 elif result == 88:
                     logger.error('invocation failed')
                 else:
-                    logger.error('result gave invalid return code: ' + result)
-                # todo
-                print("$executable_name: $result_str ($time_result)")
+                    logger.error('Result gave an invalid return code: ' + str(result))
                 if result != 0:
-                    bad_files[executable_name].append(testcase.name)
+                    solution.bad_testcases.append(dataset.name + '/' + testcase.name)
                     logger.info('Input:')
-                    logger.info(testcase.input)
+                    print_file_contents(testcase.input)
                     logger.info('Output:')
-                    logger.info(solution_testcase_out)
-                if output != '':
-                    print(output)
-    print('Summary')
-    for executable in executables:
-        executable_name = ''
-        print(executable_name)
-        if len(bad_files[executable_name]) != 0:
-            print('Errors in ' + str(bad_files[executable_name]))
+                    print_file_contents(solution_testcase_out)
+    logger.info('Summary')
+    for solution in solutions:
+        res_string = ''
+        if len(solution.bad_testcases) != 0:
+            res_string = 'Errors in ' + str(solution.bad_testcases)
         else:
-            print('OK')
+            res_string = 'OK'
+        logger.info(solution.name + " (" + str(round(solution.timer.get_total(), 3)) + "s): " + res_string)
 
-# structure
+# == Structure ===================================================================
 
 class Program:
     def __init__(self, source_file):
@@ -217,10 +217,12 @@ class Program:
         # todo check is compilation went ok, if not stop the program execution and raise error
         return True
     def run(self, args=[], input_file=None, output_file=None, timeout=None):
+        logger.debug('running: ' + self.name)
         in_file = None
         if input_file: in_file = open(input_file)
         out_file = None
         if output_file: out_file = open(output_file, 'w')
+        # todo timeout
         p = subprocess.Popen([self.exe] + args, stdin=in_file, stdout=out_file)
         p.wait()
         if out_file: out_file.flush()
@@ -231,6 +233,7 @@ class Solution(Program):
     def __init__(self, solution_file):
         super().__init__(solution_file)
         self.bad_testcases = []
+        self.timer = Timer()
 
 class Testcase:
     def __init__(self, testcase_input_file, dataset):
@@ -258,26 +261,51 @@ class Dataset:
     def get_testcases(self, testcase_regex):
         if testcase_regex is None:
             testcase_regex = "*"
-        self.testcases = [Testcase(x, self) for x in list(glob.glob(join(self.data_folder, testcase_regex + '.in')))]
-        logger.info('found ' + str(len(self.testcases)) + ' testcases')
+        globbed_testcases = list(glob.glob(join(self.data_folder, testcase_regex + '.in')))
+        globbed_testcases.sort()
+        self.testcases = [Testcase(x, self) for x in globbed_testcases]
+        logger.verbose('found ' + str(len(self.testcases)) + ' testcases')
 
-# configuration
+class Timer:
+    def __init__(self):
+        self.total = 0.0
+
+    def start(self):
+        run_info = self.get_info()
+        self.start_time = run_info.ru_utime + run_info.ru_stime
+
+    def stop(self):
+        run_info = self.get_info()
+        self.end_time = run_info.ru_utime + run_info.ru_stime
+        self.total += self.end_time - self.start_time
+
+    def get_total(self):
+        return self.total
+
+    def get_info(self):
+        return resource.getrusage(resource.RUSAGE_CHILDREN)
+
+# == Configuration ===============================================================
 
 def setup_logging():
+    # make custom verbose level
+    logging.addLevelName(VERBOSE_LEVEL, "VERBOSE")
+    def verbose(self, message, *args, **kws):
+        if self.isEnabledFor(VERBOSE_LEVEL):
+            self._log(VERBOSE_LEVEL, message, args, **kws)
+    logging.Logger.verbose = verbose
     global logger
     logger = logging.getLogger()
     ch = logging.StreamHandler()
-    ch.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
     ch.setFormatter(formatter)
     logger.addHandler(ch)
 
 def configure():
     if not exists(algo_config_folder):
-        # logger.info('first run configuration')
         os.makedirs(algo_config_folder)
 
-# file manipulation
+# == File Manipulation ===========================================================
 
 def bare_filename(file_location):
     return basename(file_location).split('.')[0]
@@ -294,16 +322,14 @@ def get_file_or_folder(problem_folder, base_name):
 def compile_src(src_file, build_path):
     os.makedirs(build_path, exist_ok=True)
     exe_name = bare_filename(src_file) + '.exe'
-    if exe_name[0] == '_':
-        exe_name = 'default.exe'
     exe_file = join(build_path, exe_name)
-    logger.info('compile ' + basename(src_file) + ' into ' + exe_file)
+    logger.verbose('compile ' + basename(src_file) + ' into ' + exe_file)
     res = subprocess.run(['g++'] + cflags + ['-o', exe_file, src_file])
-    logger.info('compilation return code: ' + str(res.returncode))
+    logger.verbose('compilation return code: ' + str(res.returncode))
     return exe_file
 
 def find_problem(problem_id):
-    logger.info('PROBLEM ID: ' + problem_id)
+    logger.verbose('PROBLEM ID: ' + problem_id)
     # search in working directory
     location_path = join(working_directory, problem_id)
     definition_path = join(location_path, def_file)
@@ -318,6 +344,18 @@ def find_problem(problem_id):
         return cpp_file_path
     return None
 
+def print_file_contents(file_name, number_of_lines=20):
+    with open(file_name, 'r') as lines:
+        c = 1
+        for line in lines:
+            print(str(c) + ': ' + line[:100])
+            if len(line[101:102]):
+                print('...<more characters>')
+            c+=1
+            if c >= number_of_lines:
+                print('...<more lines>')
+                break
+
 def hash_file(file_location):
     BUF_SIZE = 65536  # lets read stuff in 64kb chunks!
     sha1 = hashlib.sha1()
@@ -329,24 +367,41 @@ def hash_file(file_location):
     logger.debug('hashed ' + file_location + ' into ' + sha1.hexdigest())
     return sha1.hexdigest()
 
-# core script logic chunks
+# == Core Script Logic Chunks ====================================================
 
-def determine_checking_mechanism(judge, checker, referential_solution):
+def determine_checking_mechanism(judge, checker, referential_solutions):
     mechanism = None
     if judge and len(judge) >= 1:
         mechanism = 'judge'
     elif checker and len(checker) >= 1:
-        if referential_solution is None:
+        if referential_solutions is None:
             if len(solutions) == 1:
-                logger.info('This problem has checker but no referential solution. Please consider supplying more than one solution to enalbe cross-validation. The first supplied solution will be assumed to be referential.')
+                logger.warning('This problem has checker but no referential solution. Please consider supplying more than one solution to enalbe cross-validation. The first supplied solution will be assumed to be referential.')
             else:
                 # todo if problem has no default solution, pick one of the supplied solutions
                 referential_code = solutions[0]
-                referential_solution = ''
-                logger.info('Referential solution was chosen to be: ' + referential_solution)
+                referential_solutions = ''
+                logger.info('Referential solution was chosen to be: ' + referential_solutions)
         mechanism = 'checker'
     return mechanism
 
+def validate_testcases(validators, datasets):
+    if validators:
+        for validator in validators:
+            if not validator.compile():
+                return False
+        logger.info('Testing validity of testcases')
+        for dataset in datasets:
+            for testcase in dataset.testcases:
+                if validators:
+                    for validator in validators:
+                        if validator.run([], testcase.input) != 0:
+                            logger.error('Testcase ' + dataset.name + "/" + testcase.name + ' is INVALID, according to validator ' + validator.name)
+                            return False
+        logger.info('All testcases were validated successfully')
+    return True
+
+# ================================================================================
 
 if __name__ == "__main__":
     main()
