@@ -9,7 +9,7 @@ $ git clone https://gitlab.fit.cvut.cz/acm/acm-algo.git
 
 Now, you can add a symbolic link to `./algo.sh` to your path, e.g. `~/bin`, so that you can run this script from any location.
 ```
-$ ln -s ./acm-algo/algo.py ~/bin/algo
+$ ln -s "$PWD/acm-algo/algo.py" ~/bin/algo
 ```
 
 Also, to be able to use common problem definitions, download the problem repository.
@@ -66,6 +66,9 @@ Generating .................................................. done
 2019-11-02 19:42:55,178 - INFO - default_library_sort (0.001s): OK
 2019-11-02 19:42:55,178 - INFO - radix_sort (0.002s): OK
 ```
+
+Note that all additional files (datasets, compilation results) are stored in `<problem directory>/.tmp` folder.
+Delete it if you think some old files there cause weird issues.
 
 ## Advanced usage
 
