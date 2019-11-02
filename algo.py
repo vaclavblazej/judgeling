@@ -8,7 +8,7 @@
 # static dataset ?
 # simplification of testcases to find small bad testcase ?
 
-import os, sys, argparse, logging, glob, subprocess, random, re, hashlib
+import os, sys, argparse, logging, glob, subprocess, random, re, hashlib, json
 import resource # unix specific, for measuring time, see https://stackoverflow.com/questions/16701310/get-how-much-time-python-subprocess-spends/16701365
 from os.path import * # frequent functions: join, exists, dirname, realpath, etc.
 
@@ -16,6 +16,7 @@ OK = 0
 WRONG_ANSWER = 1
 PRESENTATION_ERROR = 2
 TIMELIMIT_EXCEEDED = 3
+BAD_INVOCATION = 43
 DEFAULT_FLAG = 88
 
 VERBOSE_LEVEL = 15
@@ -31,15 +32,14 @@ parser.add_argument('-v', '--verbose', dest='logging_level', const=VERBOSE_LEVEL
 parser.add_argument('-d', '--debug', dest='logging_level', const=logging.DEBUG, action='store_const', help='very detailed messages of script\'s inner workings')
 parser.add_argument('--version', dest='version', action='store_true', help='prints out version information')
 
-preprocessor_flag='ALGME'
-cflags=['-O2', '-g', '-std=c++17', '-lm', '-pedantic', '-D'+preprocessor_flag]
-ext='.cpp'
+conf = {
+    'logging_level': logging.INFO,
+}
 script_path = dirname(realpath(__file__))
 working_directory = os.getcwd()
-algo_config_folder = join(script_path, '.config')
-def_file = 'def.toml'
+global_config_folder = join(script_path, 'config.json')
+local_config_folder = join(script_path, 'config_local.json')
 problem_search_location = realpath(join(script_path, '..', 'acm-problems/problems'))
-statistics_file_name = 'time.cls'
 version = '0.1.0'
 
 # == Main Logic ==================================================================
@@ -47,11 +47,10 @@ version = '0.1.0'
 def main():
     setup_logging()
     args = parser.parse_args()
-    if not args.logging_level: 
-        args.logging_level = logging.INFO
-    if args.logging_level: logger.setLevel(args.logging_level)
+    if not args.logging_level: args.logging_level = conf['logging_level']
+    logger.setLevel(args.logging_level)
     configure()
-    # todo print configuration
+    logger.debug('Configuration: ' + str(conf))
     logger.debug('SCRIPT FOLDER: ' + script_path)
     logger.debug('WORKING DIRECTORY: ' + working_directory)
     logger.debug('arguments: ' + str(sys.argv))
@@ -69,8 +68,8 @@ def main():
         return 1
     problem_folder = dirname(problem_def_path)
     global data_path, build_path
-    data_path=join(problem_folder, ".tmp", "data")
-    build_path=join(problem_folder, ".tmp", "build")
+    data_path=join(problem_folder, conf['problem_tmp_folder'], "data")
+    build_path=join(problem_folder, conf['problem_tmp_folder'], "build")
 
     # if no testing will take place, print the problem, input, and output definition, and exit
 
@@ -93,7 +92,7 @@ def main():
         logger.info('Searching for solutions; the ' + args.problem_id + ' is solved in:')
         problem_flag = 'solves ' + args.problem_id
         found = []
-        for cpp_file_path in glob.glob('*.cpp', recursive=True):
+        for cpp_file_path in glob.glob('*' + conf['ext'], recursive=True):
             with open(cpp_file_path) as cpp_file:
                 if problem_flag in cpp_file.read():
                     found.append(cpp_file_path)
@@ -117,7 +116,8 @@ def main():
     # gets the input and contestant's output and checks that the output is correct
     judges = get_file_or_folder(problem_folder, 'jud')
     # referential solution used to produce correct output to compare with
-    referential_solutions = get_file_or_folder(problem_folder, 'sol')
+    raw_ref_solutions = get_file_or_folder(problem_folder, 'sol')
+    referential_solutions = [Solution(x.source_file) for x in raw_ref_solutions]
     # compares one solution against referential solution if it is correct
     checkers = get_file_or_folder(problem_folder, 'chk')
 
@@ -152,6 +152,17 @@ def main():
     if judges:
         for judge in judges:
             judge.compile()
+    if mechanism == 'checker':
+        if referential_solutions:
+            for ref in referential_solutions:
+                ref.compile()
+        if checkers:
+            for checker in checkers:
+                checker.compile()
+        for dataset in datasets:
+            for testcase in dataset.testcases:
+                referential_solutions[0].run([], testcase.input, testcase.correct_output)
+        solutions.extend(referential_solutions)
 
     if not validate_testcases(validators, datasets):
         return 1
@@ -169,8 +180,8 @@ def main():
             for solution in viable_solutions:
                 solution_out_dir = join(dataset.data_folder, 'sol', solution.name)
                 os.makedirs(solution_out_dir, exist_ok=True)
-                solution_testcase_out = join(solution_out_dir, testcase.name + '.out')
-                time_result_file = join(solution_out_dir, statistics_file_name)
+                solution_testcase_out = join(solution_out_dir, testcase.name + conf['out_ext'])
+                time_result_file = join(solution_out_dir, conf['statistics_file_name'])
                 time_limit_seconds = 6
                 solution.timer.start()
                 result = DEFAULT_FLAG
@@ -191,9 +202,7 @@ def main():
                         result = judge.run([testcase.input, solution_testcase_out])
                     elif mechanism == 'checker':
                         checker = checkers[0]
-                        if not testcase.correct_output:
-                            referential_solutions[0].run([], testcase.input, testcase.correct_output)
-                        result = checker.run([], testcase.correct_output, solution_testcase_out)
+                        result = checker.run([testcase.correct_output, solution_testcase_out])
                     else:
                         logger.error('invalid checking mechanism')
                         continue
@@ -205,6 +214,9 @@ def main():
                     logger.error('PRESENTATION ERROR')
                 elif result == TIMELIMIT_EXCEEDED:
                     logger.error('TIMELIMIT EXCEEDED')
+                elif result == BAD_INVOCATION:
+                    logger.critical('Bad invocation of testing program')
+                    return 1
                 elif result == DEFAULT_FLAG:
                     logger.error('invocation failed')
                 else:
@@ -262,7 +274,7 @@ class Testcase:
         self.input = testcase_input_file
         self.dataset = dataset
         self.name = bare_filename(self.input)
-        self.correct_output = join(dirname(testcase_input_file), self.name, '.out')
+        self.correct_output = join(dirname(testcase_input_file), self.name + conf['out_ext'])
         self.valid = True
 
     def test(self, input_file):
@@ -323,8 +335,17 @@ def setup_logging():
     logger.addHandler(ch)
 
 def configure():
-    if not exists(algo_config_folder):
-        os.makedirs(algo_config_folder)
+    conf.update(load_configuration(global_config_folder))
+    conf.update(load_configuration(local_config_folder))
+    return 
+
+def load_configuration(config_file_location):
+    try:
+        with open(config_file_location) as config_file:
+            data = json.load(config_file)
+    except FileNotFoundError:
+        return dict()
+    return data
 
 # == File Manipulation ===========================================================
 
@@ -332,12 +353,12 @@ def bare_filename(file_location):
     return basename(file_location).split('.')[0]
 
 def get_file_or_folder(problem_folder, base_name):
-    base_file_path = join(problem_folder, base_name + '.cpp')
+    base_file_path = join(problem_folder, base_name + conf['ext'])
     base_folder_path = join(problem_folder, base_name)
     if exists(base_file_path):
         return [Program(base_file_path)]
     elif exists(base_folder_path):
-        return [Program(x) for x in list(glob.glob(join(base_folder_path, '*.cpp')))]
+        return [Program(x) for x in list(glob.glob(join(base_folder_path, '*'+conf['ext'])))]
     return None
 
 def compile_src(src_file, build_path):
@@ -351,7 +372,7 @@ def compile_src(src_file, build_path):
         logger.verbose('skip compilation due to non-changed source file')
         return exe_file
     logger.verbose('compile ' + basename(src_file) + ' into ' + exe_file)
-    res = subprocess.run(['g++'] + cflags + ['-o', exe_file, src_file])
+    res = subprocess.run(['g++'] + conf['cflags'] + ['-o', exe_file, src_file])
     logger.verbose('compilation return code: ' + str(res.returncode))
     save_content(hash_location, new_src_hash);
     return exe_file
@@ -360,12 +381,12 @@ def find_problem(problem_id):
     logger.verbose('PROBLEM ID: ' + problem_id)
     # search in working directory
     location_path = join(working_directory, problem_id)
-    definition_path = join(location_path, def_file)
+    definition_path = join(location_path, conf['def_file'])
     if exists(location_path) and exists(definition_path):
         logger.debug('problem found locally in ' + location_path)
         return location_path
     # serach in default problem repository location
-    repository_path_regex = join(problem_search_location, "**", problem_id, def_file)
+    repository_path_regex = join(problem_search_location, "**", problem_id, conf['def_file'])
     logger.debug('repository_path_regex: ' + repository_path_regex)
     for cpp_file_path in glob.glob(repository_path_regex, recursive=True):
         # todo if found more problem, raise warning or error
@@ -411,9 +432,7 @@ def hash_file(file_location):
 
 def determine_checking_mechanism(judge, checker, referential_solutions):
     mechanism = None
-    if judge and len(judge) >= 1:
-        mechanism = 'judge'
-    elif checker and len(checker) >= 1:
+    if checker and len(checker) >= 1:
         if referential_solutions is None:
             if len(solutions) == 1:
                 logger.warning('This problem has checker but no referential solution. Please consider supplying more than one solution to enalbe cross-validation. The first supplied solution will be assumed to be referential.')
@@ -423,6 +442,8 @@ def determine_checking_mechanism(judge, checker, referential_solutions):
                 referential_solutions = ''
                 logger.info('Referential solution was chosen to be: ' + referential_solutions)
         mechanism = 'checker'
+    elif judge and len(judge) >= 1:
+        mechanism = 'judge'
     return mechanism
 
 def validate_testcases(validators, datasets):

@@ -2,5 +2,5 @@ build/
 tmp/
 data/
 *.pdf
-.config/
+config_local.json
 
