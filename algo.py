@@ -104,9 +104,7 @@ def main():
         return 1
 
     for solution in solutions:
-        if not solution.compile():
-            logger.error('Compilation of a solution ' + solution.name + ' was not succesful')
-            return 1
+        solution.compile()
 
     # prepare code correctness checking mechanism variables
     # generates input datasets
@@ -244,8 +242,6 @@ class Program:
         self.name = bare_filename(source_file)
     def compile(self):
         self.exe = compile_src(self.source_file, build_path)
-        # todo check is compilation went ok, if not stop the program execution and raise error
-        return True
     def run(self, args=[], input_file=None, output_file=None, timeout=None):
         logger.debug('running: ' + self.name)
         in_file = None
@@ -373,6 +369,8 @@ def compile_src(src_file, build_path):
         return exe_file
     logger.verbose('compile ' + basename(src_file) + ' into ' + exe_file)
     res = subprocess.run(['g++'] + conf['cflags'] + ['-o', exe_file, src_file])
+    if res.returncode != 0:
+        raise Exception('unable to compile a source code: ' + src_file)
     logger.verbose('compilation return code: ' + str(res.returncode))
     save_content(hash_location, new_src_hash);
     return exe_file
@@ -449,8 +447,7 @@ def determine_checking_mechanism(judge, checker, referential_solutions):
 def validate_testcases(validators, datasets):
     if validators:
         for validator in validators:
-            if not validator.compile():
-                return False
+            validator.compile()
         logger.info('Testing validity of testcases')
         for dataset in datasets:
             for testcase in dataset.testcases:
