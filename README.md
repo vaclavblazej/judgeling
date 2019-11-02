@@ -2,51 +2,69 @@
 
 ## Setup
 
-First, download this repository by running
+First, download this repository by running.
 ```
-git clone https://gitlab.fit.cvut.cz/acm/acm-algo.git
+$ git clone https://gitlab.fit.cvut.cz/acm/acm-algo.git
 ```
 
 Now, you can add a symbolic link to `./algo.sh` to your path, e.g. `~/bin`, so that you can run this script from any location.
 ```
-ln -s acm-algo/algo.py ~/bin/algo
+$ ln -s ./acm-algo/algo.py ~/bin/algo
+```
+
+Also, to be able to use common problem definitions, download the problem repository.
+```
+$ git clone https://gitlab.fit.cvut.cz/acm/acm-problems.git
 ```
 
 ## Basic usage
 
 To test your code run:
 ```
-algo -P PROBLEM_ID -S [SOLUTION.cpp ...]
+$ algo -P PROBLEM_ID -S [SOLUTION.cpp ...]
 ```
-
-<!--todo-->
+The `PROBLEM_ID` either represents path to local problem definition, or a problem name from `acm-problems` repository (e.g. *sort*).
 
 The script will compile your code and run it against respective datasets.
 
 ```
-Dataset: /basic
-testcase: ./test0001.in is VALID
-segment_tree: WRONG ANSWER
-[0:0] [1:0] [2:2] [3:2] [4:2] [5:2] [6:2] [7:2] [8:2] [9:0] [10:0] [11:0] [12:0]
-F/T:1 5
-error sum 6 != 7
-testcase: ./test0002.in is VALID
-segment_tree: OK
-testcase: ./test0003.in is VALID
-segment_tree: OK
-Dataset: /static
-testcase: ./test1.in is VALID
-segment_tree: OK
-
-============== Summary ====================
-segment_tree: Errors in ./test0001.in
+$ algo -P sort -S default_library_sort.cpp radix_sort.cpp
+Generating .................................................. done
+2019-11-02 19:38:36,070 - INFO - Testing validity of testcases
+2019-11-02 19:38:36,430 - INFO - All testcases were validated successfully
+2019-11-02 19:38:36,430 - INFO - Running datasets on solutions
+2019-11-02 19:38:36,431 - INFO - Dataset small_data
+2019-11-02 19:38:36,431 - INFO - Testcase: 001
+2019-11-02 19:38:36,488 - INFO - Testcase: 002
+2019-11-02 19:38:36,548 - INFO - Testcase: 003
+2019-11-02 19:38:36,607 - INFO - Testcase: 004
+2019-11-02 19:38:36,666 - INFO - Testcase: 005
+2019-11-02 19:38:36,728 - INFO - Testcase: 006
+2019-11-02 19:38:36,788 - INFO - Testcase: 007
+2019-11-02 19:38:36,847 - INFO - Testcase: 008
+2019-11-02 19:38:36,431 - INFO - Dataset big_data
+2019-11-02 19:38:36,431 - INFO - Testcase: 001
+2019-11-02 19:38:36,488 - INFO - Testcase: 002
+2019-11-02 19:38:36,548 - INFO - Testcase: 003
+2019-11-02 19:38:37,655 - INFO - Summary
+2019-11-02 19:38:37,656 - INFO - default_library_sort (0.507s): OK
+2019-11-02 19:38:37,656 - INFO - radix_sort (0.553s): OK
 ```
 
 You will see which of the testcases were failed and possibly some additional information from the checker/judge to help with debugging.
-To test against them specifically use dataset regex `-D` and testcase regex `-C`.
+To test against specific datasets or testcases using dataset regex `-D` and testcase regex `-T` arguments.
 
 ```
-algo -D basic -C 001 -P segment_tree -S segment_tree.cpp
+$ algo -P sort -S default_library_sort.cpp radix_sort.cpp -T 007
+Generating .................................................. done
+2019-11-02 19:42:55,168 - INFO - Testing validity of testcases
+2019-11-02 19:42:55,170 - INFO - All testcases were validated successfully
+2019-11-02 19:42:55,170 - INFO - Running datasets on solutions
+2019-11-02 19:42:55,170 - INFO - Dataset small_data
+2019-11-02 19:42:55,170 - INFO - Testcase: 007
+2019-11-02 19:42:55,178 - INFO - Summary
+2019-11-02 19:42:55,178 - INFO - default_library_sort (0.001s): OK
+2019-11-02 19:42:55,178 - INFO - radix_sort (0.002s): OK
 ```
 
 ## Advanced usage
@@ -55,12 +73,12 @@ algo -D basic -C 001 -P segment_tree -S segment_tree.cpp
 
 You may test your program in several various ways depending on how much you entangle your solution to the problem.
 
-1. Basic level - simply load input, solve, print output; measures: total speed, total code complexity
-2. (todo) Measurement tools - you make few additional calls to the algo library; measures: speed of various algorithm parts, algorithm code complexity.
+1. Basic level - load input, solve, print output; measures: total speed
+2. (to be implemented) Measurement tools - you make few additional calls to the algo library; measures: speed of various algorithm parts, algorithm code complexity.
 
-#### Changing solution to allow more precise measurements
+#### Changing solution to allow more precise measurements (to be implemented)
 
-; keep your code compilable without these tools using `#ifdef ALGME`
+Keep your code compilable with standard commands using `#ifdef ALGME`
 
 ### Problem definition structure
 The folder/file structure in problems folder represents the primary categorization of each problem. The problem definition with its input/output definition to solve it
@@ -70,17 +88,21 @@ The folder/file structure in problems folder represents the primary categorizati
 * corectness check
     * checker - compares your solution with the referential solution (requires solution)
     * judge - is given your solution and input and decides if it is correct
-* generator - creates testing datasets and their testcases
+* generator - creates testing datasets and their testcases, dataset name corresponds to the generator name
 * solution - referential solution which is assumed to be correct
 
 ```
 <problem_name>
     def.toml
     gen
+        <generator 1>.cpp
+        <generator 2>.cpp
     val
-    jud
-    chk
-    sol
+        <validator 1>.cpp
+        <validator 2>.cpp
+    jud.cpp (judge, which compares input and user's output)
+    chk.cpp (checker, compares referential and user's output)
+    sol.cpp (referential solution)
 ```
 
 Each part can be either a cpp file directly, or a directory containing several cpp files.
