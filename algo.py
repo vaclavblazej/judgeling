@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # if possible, keep this file under 1000 lines
 
+# add precise time measurements
 # option to define dataset size ?
 # list problem command ?
 # repositories with problems ?
@@ -10,6 +11,12 @@
 import os, sys, argparse, logging, glob, subprocess, random, re, hashlib
 import resource # unix specific, for measuring time, see https://stackoverflow.com/questions/16701310/get-how-much-time-python-subprocess-spends/16701365
 from os.path import * # frequent functions: join, exists, dirname, realpath, etc.
+
+OK = 0
+WRONG_ANSWER = 1
+PRESENTATION_ERROR = 2
+TIMELIMIT_EXCEEDED = 3
+DEFAULT_FLAG = 88
 
 VERBOSE_LEVEL = 15
 ALL_LEVEL = 60
@@ -152,42 +159,53 @@ def main():
     logger.info('Running datasets on solutions')
     for dataset in datasets:
         logger.info('Dataset ' + dataset.name)
+        for solution in solutions: solution.disqualified = False
         for testcase in dataset.testcases:
+            viable_solutions = [s for s in solutions if not s.disqualified]
+            if len(viable_solutions) == 0:
+                logger.info('all solutions were disqualified, skipping rest of testcases')
+                break
             logger.info('Testcase: ' + testcase.name)
-            for solution in solutions:
+            for solution in viable_solutions:
                 solution_out_dir = join(dataset.data_folder, 'sol', solution.name)
                 os.makedirs(solution_out_dir, exist_ok=True)
                 solution_testcase_out = join(solution_out_dir, testcase.name + '.out')
                 time_result_file = join(solution_out_dir, statistics_file_name)
-                time_limit_seconds = 10
-                # todo add precise time measurements
+                time_limit_seconds = 6
                 solution.timer.start()
-                if solution.run([], testcase.input, solution_testcase_out, time_limit_seconds) != 0:
-                    logger.info('The program returned ' + result + ' and output >>>')
-                    subprocess.run(['cat', solution_testcase_out])
-                    logger.info('<<<')
-                    solution.timer.stop()
-                    continue
+                result = DEFAULT_FLAG
+                try:
+                    if solution.run([], testcase.input, solution_testcase_out, time_limit_seconds) != 0:
+                        logger.info('The program returned ' + result + ' and output >>>')
+                        subprocess.run(['cat', solution_testcase_out])
+                        logger.info('<<<')
+                        solution.timer.stop()
+                        continue
+                except subprocess.TimeoutExpired as ex:
+                    result = TIMELIMIT_EXCEEDED
+                    solution.disqualified = True
                 solution.timer.stop()
-                result = 88
-                if mechanism == 'judge':
-                    judge = judges[0]
-                    result = judge.run([testcase.input, solution_testcase_out])
-                elif mechanism == 'checker':
-                    checker = checkers[0]
-                    if not testcase.correct_output:
-                        referential_solutions[0].run([], testcase.input, testcase.correct_output)
-                    result = checker.run([], testcase.correct_output, solution_testcase_out)
-                else:
-                    logger.error('invalid checking mechanism')
-                    continue
-                if result == 0:
+                if result == DEFAULT_FLAG:
+                    if mechanism == 'judge':
+                        judge = judges[0]
+                        result = judge.run([testcase.input, solution_testcase_out])
+                    elif mechanism == 'checker':
+                        checker = checkers[0]
+                        if not testcase.correct_output:
+                            referential_solutions[0].run([], testcase.input, testcase.correct_output)
+                        result = checker.run([], testcase.correct_output, solution_testcase_out)
+                    else:
+                        logger.error('invalid checking mechanism')
+                        continue
+                if result == OK:
                     logger.verbose('OK')
-                elif result == 1:
+                elif result == WRONG_ANSWER:
                     logger.error('WRONG ANSWER')
-                elif result == 2:
+                elif result == PRESENTATION_ERROR:
                     logger.error('PRESENTATION ERROR')
-                elif result == 88:
+                elif result == TIMELIMIT_EXCEEDED:
+                    logger.error('TIMELIMIT EXCEEDED')
+                elif result == DEFAULT_FLAG:
                     logger.error('invocation failed')
                 else:
                     logger.error('Result gave an invalid return code: ' + str(result))
@@ -222,9 +240,12 @@ class Program:
         if input_file: in_file = open(input_file)
         out_file = None
         if output_file: out_file = open(output_file, 'w')
-        # todo timeout
         p = subprocess.Popen([self.exe] + args, stdin=in_file, stdout=out_file)
-        p.wait()
+        try:
+            p.wait(timeout)
+        except subprocess.TimeoutExpired as ex:
+            p.kill()
+            raise ex
         if out_file: out_file.flush()
         logger.debug('program run returns: ' + str(p.returncode))
         return p.returncode
@@ -234,6 +255,7 @@ class Solution(Program):
         super().__init__(solution_file)
         self.bad_testcases = []
         self.timer = Timer()
+        self.disqualified = False
 
 class Testcase:
     def __init__(self, testcase_input_file, dataset):
@@ -288,7 +310,6 @@ class Timer:
 # == Configuration ===============================================================
 
 def setup_logging():
-    # make custom verbose level
     logging.addLevelName(VERBOSE_LEVEL, "VERBOSE")
     def verbose(self, message, *args, **kws):
         if self.isEnabledFor(VERBOSE_LEVEL):
@@ -321,11 +342,18 @@ def get_file_or_folder(problem_folder, base_name):
 
 def compile_src(src_file, build_path):
     os.makedirs(build_path, exist_ok=True)
-    exe_name = bare_filename(src_file) + '.exe'
-    exe_file = join(build_path, exe_name)
+    base_src_name = bare_filename(src_file)
+    exe_file = join(build_path, base_src_name + '.exe')
+    hash_location = join(build_path, base_src_name + '.hash')
+    new_src_hash = hash_file(src_file)
+    old_src_hash = retrieve_content(hash_location)
+    if new_src_hash == old_src_hash and exists(exe_file):
+        logger.verbose('skip compilation due to non-changed source file')
+        return exe_file
     logger.verbose('compile ' + basename(src_file) + ' into ' + exe_file)
     res = subprocess.run(['g++'] + cflags + ['-o', exe_file, src_file])
     logger.verbose('compilation return code: ' + str(res.returncode))
+    save_content(hash_location, new_src_hash);
     return exe_file
 
 def find_problem(problem_id):
@@ -355,6 +383,18 @@ def print_file_contents(file_name, number_of_lines=20):
             if c >= number_of_lines:
                 print('...<more lines>')
                 break
+
+def retrieve_content(file_location):
+    try:
+        with open(file_location, 'r') as f:
+            data = f.read()
+            return data
+    except FileNotFoundError: pass
+    return None
+
+def save_content(file_location, content):
+    with open(file_location, 'w+') as f:
+        f.write(content)
 
 def hash_file(file_location):
     BUF_SIZE = 65536  # lets read stuff in 64kb chunks!
