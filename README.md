@@ -90,7 +90,7 @@ The folder/file structure in problems folder represents the primary categorizati
 * validator - checks whether the input is correct (mainly for custom made input)
 * corectness check
     * checker - compares your solution with the referential solution (requires solution)
-    * judge - is given your solution and input and decides if it is correct
+    * judge - is given your solution and input and decides if it is correct, generally faster to run
 * generator - creates testing datasets and their testcases, dataset name corresponds to the generator name
 * solution - referential solution which is assumed to be correct
 

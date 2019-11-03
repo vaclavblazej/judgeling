@@ -4,5 +4,7 @@
     "def_file": "def.toml",
     "statistics_file_name": "time.cvs",
     "problem_tmp_folder": ".tmp",
-    "out_ext": ".out"
+    "out_ext": ".out",
+    "logging_level": 20,
+    "time_limit_seconds": 6
 }
