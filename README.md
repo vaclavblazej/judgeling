@@ -33,7 +33,7 @@ Generating .................................................. done
 2019-11-02 19:38:36,070 - INFO - Testing validity of testcases
 2019-11-02 19:38:36,430 - INFO - All testcases were validated successfully
 2019-11-02 19:38:36,430 - INFO - Running datasets on solutions
-2019-11-02 19:38:36,431 - INFO - Dataset small_data
+2019-11-02 19:38:36,431 - INFO - Dataset small
 2019-11-02 19:38:36,431 - INFO - Testcase: 001
 2019-11-02 19:38:36,488 - INFO - Testcase: 002
 2019-11-02 19:38:36,548 - INFO - Testcase: 003
@@ -42,7 +42,7 @@ Generating .................................................. done
 2019-11-02 19:38:36,728 - INFO - Testcase: 006
 2019-11-02 19:38:36,788 - INFO - Testcase: 007
 2019-11-02 19:38:36,847 - INFO - Testcase: 008
-2019-11-02 19:38:36,431 - INFO - Dataset big_data
+2019-11-02 19:38:36,431 - INFO - Dataset big
 2019-11-02 19:38:36,431 - INFO - Testcase: 001
 2019-11-02 19:38:36,488 - INFO - Testcase: 002
 2019-11-02 19:38:36,548 - INFO - Testcase: 003
@@ -60,7 +60,7 @@ Generating .................................................. done
 2019-11-02 19:42:55,168 - INFO - Testing validity of testcases
 2019-11-02 19:42:55,170 - INFO - All testcases were validated successfully
 2019-11-02 19:42:55,170 - INFO - Running datasets on solutions
-2019-11-02 19:42:55,170 - INFO - Dataset small_data
+2019-11-02 19:42:55,170 - INFO - Dataset small
 2019-11-02 19:42:55,170 - INFO - Testcase: 007
 2019-11-02 19:42:55,178 - INFO - Summary
 2019-11-02 19:42:55,178 - INFO - default_library_sort (0.001s): OK

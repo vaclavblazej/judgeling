@@ -2,7 +2,7 @@
     "cflags": ["-O2", "-g", "-std=c++17", "-lm", "-pedantic", "-DALGME"],
     "ext": ".cpp",
     "def_file": "def.toml",
-    "statistics_file_name": "time.cls",
+    "statistics_file_name": "time.cvs",
     "problem_tmp_folder": ".tmp",
     "out_ext": ".out"
 }

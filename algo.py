@@ -27,6 +27,7 @@ parser.add_argument('-S', '--solution', dest='solution', nargs='+', help='user\'
 parser.add_argument('-D', '--dataset', dest='dataset_regex', help='a dataset of testcases which should be run')
 parser.add_argument('-T', '--testcase', dest='testcase_regex', help='testcase which should be run')
 parser.add_argument('-s', '--scan', dest='scan', action='store_true', help='scan current folder for files solving the problem')
+parser.add_argument('--seed', dest='seed', help='provide a fixed seed for the random data generation')
 parser.add_argument('-q', '--quiet', dest='logging_level', const=ALL_LEVEL, action='store_const', help='no output will be shown')
 parser.add_argument('-v', '--verbose', dest='logging_level', const=VERBOSE_LEVEL, action='store_const', help='more detailed info about testing shown')
 parser.add_argument('-d', '--debug', dest='logging_level', const=logging.DEBUG, action='store_const', help='very detailed messages of script\'s inner workings')
@@ -106,7 +107,6 @@ def main():
     for solution in solutions:
         solution.compile()
 
-    # prepare code correctness checking mechanism variables
     # generates input datasets
     generators = get_file_or_folder(problem_folder, 'gen')
     # gets the input and determines if it matches the problem definition
@@ -139,6 +139,7 @@ def main():
     random.seed()
     global seed
     seed = random.randint(0,1e12)
+    if args.seed: seed=args.seed
     logger.verbose('Seed: ' + str(seed))
     for dataset in datasets:
         # todo input flag to force dataset generation
@@ -184,7 +185,7 @@ def main():
                 solution.timer.start()
                 result = DEFAULT_FLAG
                 try:
-                    if solution.run([], testcase.input, solution_testcase_out, time_limit_seconds) != 0:
+                    if solution.run([time_result_file], testcase.input, solution_testcase_out, time_limit_seconds) != 0:
                         logger.info('The program returned ' + result + ' and output >>>')
                         subprocess.run(['cat', solution_testcase_out])
                         logger.info('<<<')
@@ -225,6 +226,9 @@ def main():
                     print_file_contents(testcase.input)
                     logger.info('Output:')
                     print_file_contents(solution_testcase_out)
+                    if mechanism == 'checker':
+                        logger.info('Referential output:')
+                        print_file_contents(testcase.correct_output)
     logger.info('Summary')
     for solution in solutions:
         res_string = ''
@@ -243,7 +247,7 @@ class Program:
     def compile(self):
         self.exe = compile_src(self.source_file, build_path)
     def run(self, args=[], input_file=None, output_file=None, timeout=None):
-        logger.debug('running: ' + self.name)
+        logger.debug('running: ' + self.name + ' ' + str([self.exe] + args))
         in_file = None
         if input_file: in_file = open(input_file)
         out_file = None
@@ -395,10 +399,10 @@ def print_file_contents(file_name, number_of_lines=20):
     with open(file_name, 'r') as lines:
         c = 1
         for line in lines:
-            print(str(c) + ': ' + line[:100])
+            print_line = str(c) + ": " + line[:100]
             if len(line[101:102]):
-                print('...<more characters>')
-            c+=1
+                print_line += '...<more characters>'
+            c += 1
             if c >= number_of_lines:
                 print('...<more lines>')
                 break
