@@ -88,6 +88,7 @@ The folder/file structure in problems folder represents the primary categorizati
 
 * problem - contains the problem statement and input/output definitions
 * validator - checks whether the input is correct (mainly for custom made input)
+* painter - gets input and should create the picture
 * corectness check
     * checker - compares your solution with the referential solution (requires solution)
     * judge - is given your solution and input and decides if it is correct, generally faster to run
@@ -108,7 +109,7 @@ The folder/file structure in problems folder represents the primary categorizati
     sol.cpp (referential solution)
 ```
 
-Each part can be either a cpp file directly, or a directory containing several cpp files.
+Each part can be either a cpp/py/sh file directly, or a directory containing several of such files.
 
 ### Problem temporary files
 

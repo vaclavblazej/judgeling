@@ -12,7 +12,7 @@
 # remove scan ?
 # add command to generate problem definition scaffolding ?
 
-import os, sys, argparse, logging, glob, subprocess, random, re, hashlib, json
+import os, sys, argparse, logging, glob, subprocess, random, re, hashlib, json, shutil, itertools
 import resource # unix specific, for measuring time, see https://stackoverflow.com/questions/16701310/get-how-much-time-python-subprocess-spends/16701365
 from os.path import * # frequent functions: join, exists, dirname, realpath, etc.
 
@@ -24,11 +24,12 @@ OK = 0
 WRONG_ANSWER = 1
 PRESENTATION_ERROR = 2
 TIMELIMIT_EXCEEDED = 3
+RUNTIME_ERROR = 4
 BAD_INVOCATION = 43
 DEFAULT_FLAG = 88
 
 VERBOSE_LEVEL = 15
-ALL_LEVEL = 60
+QUIET_LEVEL = 60
 parser = argparse.ArgumentParser(description='Test algorithm implementations against problem definitions')
 parser.add_argument('-P', '--problem', dest='problem_id', help='problem definition to be run')
 parser.add_argument('-S', '--solution', dest='solution', nargs='+', help='user\'s files with his own solutions to the problem')
@@ -36,7 +37,7 @@ parser.add_argument('-D', '--dataset', dest='dataset_regex', help='a dataset of 
 parser.add_argument('-T', '--testcase', dest='testcase_regex', help='testcase which should be run')
 # parser.add_argument('-s', '--scan', dest='scan', action='store_true', help='scan current folder for files solving the problem')
 parser.add_argument('--seed', dest='seed', help='provide a fixed seed for the random data generation')
-parser.add_argument('-q', '--quiet', dest='logging_level', const=ALL_LEVEL, action='store_const', help='no output will be shown')
+parser.add_argument('-q', '--quiet', dest='logging_level', const=QUIET_LEVEL, action='store_const', help='no output will be shown')
 parser.add_argument('-v', '--verbose', dest='logging_level', const=VERBOSE_LEVEL, action='store_const', help='more detailed info about testing shown')
 parser.add_argument('-d', '--debug', dest='logging_level', const=logging.DEBUG, action='store_const', help='very detailed messages of script\'s inner workings')
 parser.add_argument('--version', dest='version', action='store_true', help='prints out version information')
@@ -47,7 +48,7 @@ working_directory = os.getcwd()
 global_config_folder = join(script_path, 'config.json')
 local_config_folder = join(script_path, 'config_local.json')
 problem_search_location = realpath(join(script_path, '..', 'acm-problems/problems'))
-version = '0.1.0'
+version = '0.1.1'
 
 # == Main Logic ==================================================================
 
@@ -79,11 +80,11 @@ def main():
 
     problem_folder = dirname(problem_def_path)
     global data_path, build_path
-    data_path=join(problem_folder, conf['problem_tmp_folder'], "data")
-    build_path=join(problem_folder, conf['problem_tmp_folder'], "build")
+    data_path = join(problem_folder, conf['problem_tmp_folder'], 'data')
+    build_path = join(problem_folder, conf['problem_tmp_folder'], 'build')
     logger.debug('PROBLEM PATH: ' + problem_def_path)
-    logger.debug("DATA PATH: " + data_path)
-    logger.debug("BUILD PATH: " + build_path)
+    logger.debug('DATA PATH: ' + data_path)
+    logger.debug('BUILD PATH: ' + build_path)
 
     solutions = []
     if args.solution:
@@ -118,6 +119,8 @@ def main():
     generators = get_file_or_folder(problem_folder, 'gen')
     # gets the input and determines if it matches the problem definition
     validators = get_file_or_folder(problem_folder, 'val')
+    # creates visual representation of inputs
+    painters = get_file_or_folder(problem_folder, 'pic')
     # gets the input and contestant's output and checks that the output is correct
     judges = get_file_or_folder(problem_folder, 'jud')
     # referential solution used to produce correct output to compare with
@@ -129,6 +132,7 @@ def main():
     logger.verbose('This problem has:')
     if generators: logger.verbose('Generators: ' + str(len(generators)))
     if validators: logger.verbose('Validators: ' + str(len(validators)))
+    if painters: logger.verbose('Painters: ' + str(len(painters)))
     if judges: logger.verbose('Judges: ' + str(len(judges)))
     if referential_solutions: logger.verbose('Referential solutions: ' + str(len(referential_solutions)))
     if checkers: logger.verbose('Checkers: ' + str(len(checkers)))
@@ -136,7 +140,7 @@ def main():
     mechanism = determine_checking_mechanism(judges, checkers, referential_solutions)
     if not mechanism:
         logger.critical('There is no checking mechanism!')
-        logger.critical('This is issue with the problem definition, contact the author.')
+        logger.critical('This is an issue with the problem definition, contact the author.')
         logger.critical('To fix this: create either a "judge" or "checker and referential solution"')
         return PROBLEM_ERROR
     logger.verbose('The checking mechanism is: ' + mechanism)
@@ -144,7 +148,7 @@ def main():
     random.seed()
     global seed
     seed = random.randint(0,1e12)
-    if args.seed: seed=args.seed
+    if args.seed: seed = args.seed
     logger.verbose('Seed: ' + str(seed))
 
     datasets = [Dataset(g) for g in generators]
@@ -155,7 +159,9 @@ def main():
         # todo input flag to force dataset generation
         # todo hash problem definition, if changed -> generate dataset again
         # when should we regenerate inputs ? -- generator changed, different seed ?
-        dataset.generate()
+        if dataset.generate() != 0:
+            logger.critical('Problem dataset generator "' + dataset.name + '" has trouble running, contact the problem setter about this issue.')
+            return PROBLEM_ERROR
         dataset.get_testcases(args.testcase_regex)
 
     if mechanism == 'judge' and judges:
@@ -172,6 +178,18 @@ def main():
 
     if not validate_testcases(validators, datasets):
         return USER_ERROR
+
+    if painters:
+        painter = painters[0]
+        painter.compile()
+        logger.info('Drawing testcases')
+        paint_outfile=os.devnull
+        if conf['logging_level'] <= VERBOSE_LEVEL: paint_outfile=None
+        for testcase in list(itertools.chain(*[dataset.testcases for dataset in datasets])):
+            logger.info('Drawing testcase ' + testcase.dataset.name + '/' + testcase.name)
+            if painter.run([testcase.input, testcase.drawing], None, paint_outfile) != 0:
+                logger.error('Unable to draw testcase "' + testcase.input + '", interrupting drawing.')
+                break;
 
     logger.info('Running datasets on solutions')
     for dataset in datasets:
@@ -194,10 +212,11 @@ def main():
                     return_code = solution.run([time_result_file], testcase.input, solution_testcase_out, conf['time_limit_seconds'])
                     solution.timer.stop()
                     if return_code != 0:
-                        logger.info('The program returned "' + return_code + '", and output >>>')
+                        logger.info('The program returned "' + str(return_code) + '", and output >>>')
                         print_file_contents(solution_testcase_out)
                         logger.info('<<<')
-                        continue
+                        result = RUNTIME_ERROR
+                        solution.disqualified = True
                 except subprocess.TimeoutExpired as ex:
                     solution.timer.stop()
                     result = TIMELIMIT_EXCEEDED
@@ -213,6 +232,8 @@ def main():
                     logger.error('WRONG ANSWER')
                 elif result == PRESENTATION_ERROR:
                     logger.error('PRESENTATION ERROR')
+                elif result == RUNTIME_ERROR:
+                    logger.error('RUNTIME ERROR')
                 elif result == TIMELIMIT_EXCEEDED:
                     logger.error('TIMELIMIT EXCEEDED')
                 elif result == BAD_INVOCATION:
@@ -239,7 +260,7 @@ def main():
             res_string = 'Errors in ' + err_str
         else:
             res_string = 'OK'
-        logger.info(solution.name + " (" + str(round(solution.timer.get_total(), 3)) + "s): " + res_string)
+        logger.info(solution.name + ' (' + str(round(solution.timer.get_total(), 3)) + 's): ' + res_string)
 
 # == Structure ===================================================================
 
@@ -278,6 +299,7 @@ class Testcase:
         self.dataset = dataset
         self.name = bare_filename(self.input)
         self.correct_output = join(dirname(testcase_input_file), self.name + conf['out_ext'])
+        self.drawing = join(dirname(testcase_input_file), self.name)
         self.valid = True
 
 class Dataset:
@@ -286,15 +308,14 @@ class Dataset:
         self.name = generator_program.name
         self.data_folder = join(data_path, self.name)
         self.testcases = None
-
     def generate(self):
         os.makedirs(self.data_folder, exist_ok = True)
         self.generator_program.compile()
-        self.generator_program.run([str(seed), self.data_folder])
-
+        run_return_code = self.generator_program.run([str(seed), self.data_folder])
+        return run_return_code
     def get_testcases(self, testcase_regex):
         if testcase_regex is None:
-            testcase_regex = "*"
+            testcase_regex = '*'
         globbed_testcases = list(glob.glob(join(self.data_folder, testcase_regex + '.in')))
         globbed_testcases.sort()
         self.testcases = [Testcase(x, self) for x in globbed_testcases]
@@ -303,19 +324,15 @@ class Dataset:
 class Timer:
     def __init__(self):
         self.total = 0.0
-
     def start(self):
         run_info = self.get_info()
         self.start_time = run_info.ru_utime + run_info.ru_stime
-
     def stop(self):
         run_info = self.get_info()
         self.end_time = run_info.ru_utime + run_info.ru_stime
         self.total += self.end_time - self.start_time
-
     def get_total(self):
         return self.total
-
     def get_info(self):
         return resource.getrusage(resource.RUSAGE_CHILDREN)
 
@@ -329,6 +346,8 @@ class BadTestResult:
             additional_str = 'WA'
         elif self.result_code == PRESENTATION_ERROR:
             additional_str = 'PE'
+        elif self.result_code == RUNTIME_ERROR:
+            additional_str = 'RTE'
         elif self.result_code == TIMELIMIT_EXCEEDED:
             additional_str = 'TLE'
         return '[' + self.testcase.dataset.name + '/' + self.testcase.name + ' ' + additional_str + ']'
@@ -336,7 +355,7 @@ class BadTestResult:
 # == Configuration ===============================================================
 
 def setup_logging():
-    logging.addLevelName(VERBOSE_LEVEL, "VERBOSE")
+    logging.addLevelName(VERBOSE_LEVEL, 'VERBOSE')
     def verbose(self, message, *args, **kws):
         if self.isEnabledFor(VERBOSE_LEVEL):
             self._log(VERBOSE_LEVEL, message, args, **kws)
@@ -366,59 +385,74 @@ def load_configuration(config_file_location):
 def bare_filename(file_location):
     return basename(file_location).split('.')[0]
 
+def file_extension(file_location):
+    return basename(file_location).split('.')[1]
+
 def get_file_or_folder(problem_folder, base_name):
-    base_file_path = join(problem_folder, base_name + conf['ext'])
+    for ext in conf['extensions']:
+        base_file_path = join(problem_folder, base_name + ext)
+        if exists(base_file_path):
+            return [Program(base_file_path)]
     base_folder_path = join(problem_folder, base_name)
-    if exists(base_file_path):
-        return [Program(base_file_path)]
-    elif exists(base_folder_path):
-        return [Program(x) for x in list(glob.glob(join(base_folder_path, '*'+conf['ext'])))]
+    if exists(base_folder_path):
+        res = []
+        for ext in conf['extensions']:
+            res.extend([Program(x) for x in list(glob.glob(join(base_folder_path, '*'+ext)))])
+        return res
     return None
 
 def compile_src(src_file, build_path):
-    os.makedirs(build_path, exist_ok=True)
-    base_src_name = bare_filename(src_file)
-    exe_file = join(build_path, base_src_name + '.exe')
-    hash_location = join(build_path, base_src_name + '.hash')
-    new_src_hash = hash_file(src_file)
-    old_src_hash = retrieve_content(hash_location)
-    if new_src_hash == old_src_hash and exists(exe_file):
-        logger.verbose('Skipped compilation of "' + basename(src_file) + '" due to non-changed source file.')
+    extension = file_extension(src_file)
+    # interpreted languages can be run directly
+    if extension == 'py' or extension == 'sh':
+        return src_file
+    # cpp-specific compilation
+    if extension == 'cpp' or extension == 'C' or extension == 'c':
+        os.makedirs(build_path, exist_ok=True)
+        base_src_name = bare_filename(src_file)
+        exe_file = join(build_path, base_src_name + '.exe')
+        hash_location = join(build_path, base_src_name + '.hash')
+        new_src_hash = hash_file(src_file)
+        old_src_hash = retrieve_content(hash_location)
+        if new_src_hash == old_src_hash and exists(exe_file):
+            logger.verbose('Skipped compilation of "' + basename(src_file) + '" due to non-changed source file.')
+            return exe_file
+        logger.info('Compiling: "' + basename(src_file) + '"')
+        logger.verbose('Compile destination: "' + exe_file + '"')
+        res = subprocess.run(['g++'] + conf['cflags'] + ['-o', exe_file, src_file])
+        if res.returncode != 0:
+            raise Exception('Unable to compile source code: "' + src_file + '"')
+        logger.verbose('Compilation return code: ' + str(res.returncode))
+        save_content(hash_location, new_src_hash);
         return exe_file
-    logger.info('Compiling: "' + basename(src_file) + '"')
-    logger.verbose('Compile destination: "' + exe_file + '"')
-    res = subprocess.run(['g++'] + conf['cflags'] + ['-o', exe_file, src_file])
-    if res.returncode != 0:
-        raise Exception('Unable to compile source code: ' + src_file)
-    logger.verbose('Compilation return code: ' + str(res.returncode))
-    save_content(hash_location, new_src_hash);
-    return exe_file
+    raise Exception('Unknown source extension "' + extension + '" for file "' + src_file + '", and so algo does not know how to prepare it to be runnable.')
 
 def find_problem(problem_id):
     logger.verbose('Problem id: "' + problem_id + '"')
     # search in working directory
-    location_path = join(working_directory, problem_id)
+    location_path = realpath(join(working_directory, problem_id))
     definition_path = join(location_path, conf['def_file'])
     if exists(location_path) and exists(definition_path):
         logger.debug('Problem found locally in "' + location_path + '"')
-        return location_path
+        return definition_path
     # serach in default problem repository location
-    repository_path_regex = join(problem_search_location, "**", problem_id, conf['def_file'])
+    repository_path_regex = join(problem_search_location, '**', problem_id, conf['def_file'])
     logger.debug('Repository path regex: "' + repository_path_regex + '"')
-    for cpp_file_path in glob.glob(repository_path_regex, recursive=True):
+    for def_file in glob.glob(repository_path_regex, recursive=True):
         # todo if found more problem, raise warning or error
-        return cpp_file_path
+        return def_file
     return None
 
 def print_file_contents(file_name, number_of_lines=20):
-    if conf['logging_level'] >= ALL_LEVEL:
+    if conf['logging_level'] >= QUIET_LEVEL:
         return
     with open(file_name, 'r') as lines:
         c = 1
         for line in lines:
-            print_line = line[:100]
-            if len(line[101:102]):
-                print_line += '...<more characters>\n'
+            if len(line[121:122]) == 0:
+                print_line = line
+            else:
+                print_line = line[:100] + '...<more characters>\n'
             c += 1
             print(print_line, end='')
             if c >= number_of_lines:
@@ -476,13 +510,13 @@ def validate_testcases(validators, datasets):
                 if validators:
                     for validator in validators:
                         if validator.run([], testcase.input) != 0:
-                            logger.error('Testcase "' + dataset.name + "/" + testcase.name + '" is INVALID, according to validator "' + validator.name + '"')
+                            logger.error('Testcase "' + dataset.name + '/' + testcase.name + '" is INVALID, according to validator "' + validator.name + '"')
                             return False
         logger.info('All testcases were validated successfully')
     return True
 
 # ================================================================================
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
 
