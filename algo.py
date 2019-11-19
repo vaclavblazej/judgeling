@@ -125,7 +125,10 @@ def main():
     judges = get_file_or_folder(problem_folder, 'jud')
     # referential solution used to produce correct output to compare with
     raw_ref_solutions = get_file_or_folder(problem_folder, 'sol')
-    referential_solutions = [Solution(x.source_file) for x in raw_ref_solutions]
+    if raw_ref_solutions:
+        referential_solutions = [Solution(x.source_file) for x in raw_ref_solutions]
+    else:
+        referential_solutions = None
     # compares one solution against referential solution if it is correct
     checkers = get_file_or_folder(problem_folder, 'chk')
 
