@@ -1,5 +1,7 @@
 # Tools to manage algorithm definitions, problem definitions, and their solutions
 
+[Solution library PDF](https://gitlab.fit.cvut.cz/acm/acm-coach/-/jobs/artifacts/master/browse/book/build?job=compile_pdf)
+
 ## Setup
 
 First, download this repository by running.
