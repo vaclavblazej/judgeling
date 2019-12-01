@@ -9,7 +9,7 @@
 # repositories with problems ?
 # static dataset ?
 # simplification of testcases to find small bad testcase ?
-# remove scan ?
+# scan for solutions ?
 # add command to generate problem definition scaffolding ?
 
 import os, sys, argparse, logging, glob, subprocess, random, re, hashlib, json, shutil, itertools
@@ -37,6 +37,7 @@ parser.add_argument('-D', '--dataset', dest='dataset_regex', help='a dataset of 
 parser.add_argument('-T', '--testcase', dest='testcase_regex', help='testcase which should be run')
 # parser.add_argument('-s', '--scan', dest='scan', action='store_true', help='scan current folder for files solving the problem')
 parser.add_argument('--seed', dest='seed', help='provide a fixed seed for the random data generation')
+parser.add_argument('--draw', dest='draw', action='store_true', help='will draw testcases using pic program')
 parser.add_argument('-q', '--quiet', dest='logging_level', const=QUIET_LEVEL, action='store_const', help='no output will be shown')
 parser.add_argument('-v', '--verbose', dest='logging_level', const=VERBOSE_LEVEL, action='store_const', help='more detailed info about testing shown')
 parser.add_argument('-d', '--debug', dest='logging_level', const=logging.DEBUG, action='store_const', help='very detailed messages of script\'s inner workings')
@@ -167,32 +168,38 @@ def main():
             return PROBLEM_ERROR
         dataset.get_testcases(args.testcase_regex)
 
+    if not validate_testcases(validators, datasets):
+        return USER_ERROR
+
     if mechanism == 'judge' and judges:
         for judge in judges:
             judge.compile()
 
     if mechanism == 'checker':
+        logger.info('Running the referential solution to get referential outputs')
         for ref in referential_solutions: ref.compile()
         for checker in checkers: checker.compile()
         for dataset in datasets:
             for testcase in dataset.testcases:
+                logger.info('running reference ' + testcase.input)
                 referential_solutions[0].run([], testcase.input, testcase.correct_output)
         solutions.extend(referential_solutions)
-
-    if not validate_testcases(validators, datasets):
-        return USER_ERROR
+        logger.info('Referential outputs obtained succesfully')
 
     if painters:
-        painter = painters[0]
-        painter.compile()
-        logger.info('Drawing testcases')
-        paint_outfile=os.devnull
-        if conf['logging_level'] <= VERBOSE_LEVEL: paint_outfile=None
-        for testcase in list(itertools.chain(*[dataset.testcases for dataset in datasets])):
-            logger.info('Drawing testcase ' + testcase.dataset.name + '/' + testcase.name)
-            if painter.run([testcase.input, testcase.drawing], None, paint_outfile) != 0:
-                logger.error('Unable to draw testcase "' + testcase.input + '", interrupting drawing.')
-                break;
+        if args.draw:
+            painter = painters[0]
+            painter.compile()
+            logger.info('Drawing testcases')
+            paint_outfile=os.devnull
+            if conf['logging_level'] <= VERBOSE_LEVEL: paint_outfile=None
+            for testcase in list(itertools.chain(*[dataset.testcases for dataset in datasets])):
+                logger.info('Drawing testcase ' + testcase.dataset.name + '/' + testcase.name)
+                if painter.run([testcase.drawing, testcase.input, testcase.correct_output], None, paint_outfile) != 0:
+                    logger.error('Unable to draw testcase "' + testcase.input + '", interrupting drawing.')
+                    break;
+        else:
+            logger.info('Available painter, add --draw flag to allow painter to draw testcases (can take a long time).')
 
     logger.info('Running datasets on solutions')
     for dataset in datasets:
@@ -263,7 +270,7 @@ def main():
             res_string = 'Errors in ' + err_str
         else:
             res_string = 'OK'
-        logger.info(solution.name + ' (' + str(round(solution.timer.get_total(), 3)) + 's): ' + res_string)
+        logger.info(solution.name + ' (time ' + str(round(solution.timer.get_total(), 3)) + 's, max ' + str(round(solution.timer.get_max(), 3)) + 's): ' + res_string)
 
 # == Structure ===================================================================
 
@@ -275,6 +282,9 @@ class Program:
         self.exe = compile_src(self.source_file, build_path)
     def run(self, args=[], input_file=None, output_file=None, timeout=None):
         logger.debug('Running: "' + self.name + '", arguments: ' + str([self.exe] + args))
+        if input_file: logger.debug('Input: ' + input_file)
+        if output_file: logger.debug('Output: ' + output_file)
+        if timeout: logger.debug('Timeout: ' + str(timeout))
         in_file = None
         if input_file: in_file = open(input_file)
         out_file = None
@@ -316,6 +326,7 @@ class Dataset:
         self.generator_program.compile()
         run_return_code = self.generator_program.run([str(seed), self.data_folder])
         return run_return_code
+        # return 0
     def get_testcases(self, testcase_regex):
         if testcase_regex is None:
             testcase_regex = '*'
@@ -327,6 +338,7 @@ class Dataset:
 class Timer:
     def __init__(self):
         self.total = 0.0
+        self.max = 0.0
     def start(self):
         run_info = self.get_info()
         self.start_time = run_info.ru_utime + run_info.ru_stime
@@ -334,8 +346,11 @@ class Timer:
         run_info = self.get_info()
         self.end_time = run_info.ru_utime + run_info.ru_stime
         self.total += self.end_time - self.start_time
+        self.max = max(self.max, self.end_time - self.start_time)
     def get_total(self):
         return self.total
+    def get_max(self):
+        return self.max
     def get_info(self):
         return resource.getrusage(resource.RUSAGE_CHILDREN)
 
@@ -409,11 +424,16 @@ def compile_src(src_file, build_path):
     # interpreted languages can be run directly
     if extension == 'py' or extension == 'sh':
         return src_file
+    base_src_name = bare_filename(src_file)
+    exe_file = join(build_path, base_src_name + '.exe')
+    compilation = []
     # cpp-specific compilation
     if extension == 'cpp' or extension == 'C' or extension == 'c':
+        compilation = ['g++'] + conf['cflags'] + ['-o', exe_file, src_file]
+    # if extension == 'java'
+        # compilation = subprocess.run(['javac'] + ['-o', exe_file, src_file])
+    if len(compilation):
         os.makedirs(build_path, exist_ok=True)
-        base_src_name = bare_filename(src_file)
-        exe_file = join(build_path, base_src_name + '.exe')
         hash_location = join(build_path, base_src_name + '.hash')
         new_src_hash = hash_file(src_file)
         old_src_hash = retrieve_content(hash_location)
@@ -422,7 +442,7 @@ def compile_src(src_file, build_path):
             return exe_file
         logger.info('Compiling: "' + basename(src_file) + '"')
         logger.verbose('Compile destination: "' + exe_file + '"')
-        res = subprocess.run(['g++'] + conf['cflags'] + ['-o', exe_file, src_file])
+        res = subprocess.run(compilation)
         if res.returncode != 0:
             raise Exception('Unable to compile source code: "' + src_file + '"')
         logger.verbose('Compilation return code: ' + str(res.returncode))
@@ -438,7 +458,7 @@ def find_problem(problem_id):
     if exists(location_path) and exists(definition_path):
         logger.debug('Problem found locally in "' + location_path + '"')
         return definition_path
-    # serach in default problem repository location
+    # search in default problem repository location
     repository_path_regex = join(problem_search_location, '**', problem_id, conf['def_file'])
     logger.debug('Repository path regex: "' + repository_path_regex + '"')
     for def_file in glob.glob(repository_path_regex, recursive=True):

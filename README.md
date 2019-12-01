@@ -111,6 +111,41 @@ The folder/file structure in problems folder represents the primary categorizati
 
 Each part can be either a cpp/py/sh file directly, or a directory containing several of such files.
 
+#### Solution
+```
+my_sol time_result_file < testcase_input > solution_testcase_output
+```
+
+#### Generator (gen)
+```
+gen random_generator_seed dataset_folder
+```
+
+#### Validator (val)
+```
+val < testcase_input
+```
+
+#### Judge (jud)
+```
+jud testcase_input solution_testcase_output
+```
+
+#### Checker (chk)
+```
+chk testcase_correct_output solution_testcase_output
+```
+
+#### Referential solution (sol)
+```
+sol < testcase_input > referential_testcase_output
+```
+
+#### Painter (pic)
+```
+pic testcase_drawing testcase_input testcase_correct_output
+```
+
 ### Problem temporary files
 
 All files are compiled into a temporary folder `.tmp` in the `<problem_name>` folder.
