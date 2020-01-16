@@ -4,6 +4,7 @@
     "statistics_file_name": "time.cvs",
     "problem_tmp_folder": ".tmp",
     "extensions": [".cpp", ".py", ".sh"],
+    "in_ext": ".in",
     "out_ext": ".out",
     "logging_level": 20,
     "time_limit_seconds": 30

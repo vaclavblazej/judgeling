@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 # if possible, keep this file under 1000 lines
 
+# get datasets from folder names in .tmp/data/
+# allow input files or folders to be passed via arguments
 # add precise time measurements
 # allow cross checking of user's solutions
 # enable generator to supply inputs without saving them
-# allow input files or folders to be passed via arguments
 # option to define dataset size ?
 # repositories with problems ?
 # static dataset ?
@@ -38,6 +39,8 @@ parser.add_argument('-T', '--testcase', dest='testcase_regex', help='testcase wh
 # parser.add_argument('-s', '--scan', dest='scan', action='store_true', help='scan current folder for files solving the problem')
 parser.add_argument('--seed', dest='seed', help='provide a fixed seed for the random data generation')
 parser.add_argument('--draw', dest='draw', action='store_true', help='will draw testcases using pic program')
+parser.add_argument('--input', dest='input', nargs='+', help='supplies the input data as list of files')
+# parser.add_argument('--regenerate', dest='regenerate', action='store_true', help='force the generators to run again')
 parser.add_argument('-q', '--quiet', dest='logging_level', const=QUIET_LEVEL, action='store_const', help='no output will be shown')
 parser.add_argument('-v', '--verbose', dest='logging_level', const=VERBOSE_LEVEL, action='store_const', help='more detailed info about testing shown')
 parser.add_argument('-d', '--debug', dest='logging_level', const=logging.DEBUG, action='store_const', help='very detailed messages of script\'s inner workings')
@@ -74,16 +77,18 @@ def main():
         logger.error('Problem ID was not supplied! Add -P <problem_id> argument.')
         return SUCCESSFULL_EXECUTION
 
-    problem_def_path = find_problem(problem_id)
-    if not problem_def_path:
+    problem_folder = find_problem_folder(problem_id)
+    if not problem_folder:
         logger.error('Unable to locate the problem definition file for "' + problem_id + '"')
         return USER_ERROR
+    problem_def_path = join(problem_folder, conf['def_file'])
+    if not exists(problem_def_path):
+        logger.warning('Problem found locally, but is missing a definition file: "' + problem_folder + '"')
 
-    problem_folder = dirname(problem_def_path)
     global data_path, build_path
     data_path = join(problem_folder, conf['problem_tmp_folder'], 'data')
     build_path = join(problem_folder, conf['problem_tmp_folder'], 'build')
-    logger.debug('PROBLEM PATH: ' + problem_def_path)
+    logger.debug('PROBLEM DIRECTORY: ' + problem_folder)
     logger.debug('DATA PATH: ' + data_path)
     logger.debug('BUILD PATH: ' + build_path)
 
@@ -118,6 +123,7 @@ def main():
 
     # generates input datasets
     generators = get_file_or_folder(problem_folder, 'gen')
+    if generators: generators = [Generator(g.source_file) for g in generators]
     # gets the input and determines if it matches the problem definition
     validators = get_file_or_folder(problem_folder, 'val')
     # creates visual representation of inputs
@@ -151,21 +157,23 @@ def main():
 
     random.seed()
     global seed
-    seed = random.randint(0,1e12)
+    seed = 0
     if args.seed: seed = args.seed
     logger.verbose('Seed: ' + str(seed))
 
-    datasets = [Dataset(g) for g in generators]
-    if args.dataset_regex:
-        datasets = [d for d in datasets if re.search(args.dataset_regex, d.name)]
-    for dataset in datasets:
-        logger.debug('Generator output folder: ' + dataset.data_folder)
+    for generator in generators:
         # todo input flag to force dataset generation
         # todo hash problem definition, if changed -> generate dataset again
         # when should we regenerate inputs ? -- generator changed, different seed ?
-        if dataset.generate() != 0:
-            logger.critical('Problem dataset generator "' + dataset.name + '" has trouble running, contact the problem setter about this issue.')
+        logger.debug('Generator output folder: ' + generator.data_folder)
+        if generator.generate() != 0:
+            logger.critical('Problem dataset generator "' + generator.name + '" has trouble running, contact the problem setter about this issue.')
             return PROBLEM_ERROR
+
+    datasets = [Dataset(g.data_folder) for g in generators]
+    if args.dataset_regex:
+        datasets = [d for d in datasets if re.search(args.dataset_regex, d.name)]
+    for dataset in datasets:
         dataset.get_testcases(args.testcase_regex)
 
     if not validate_testcases(validators, datasets):
@@ -306,6 +314,16 @@ class Solution(Program):
         self.timer = Timer()
         self.disqualified = False
 
+class Generator(Program):
+    def __init__(self, generator_file):
+        super().__init__(generator_file)
+        self.data_folder = join(data_path, self.name)
+    def generate(self):
+        os.makedirs(self.data_folder, exist_ok = True)
+        self.compile()
+        run_return_code = self.run([str(seed), self.data_folder])
+        return run_return_code
+
 class Testcase:
     def __init__(self, testcase_input_file, dataset):
         self.input = testcase_input_file
@@ -316,21 +334,15 @@ class Testcase:
         self.valid = True
 
 class Dataset:
-    def __init__(self, generator_program):
-        self.generator_program = generator_program
-        self.name = generator_program.name
+    def __init__(self, dataset_folder):
+        self.name = basename(dataset_folder)
         self.data_folder = join(data_path, self.name)
         self.testcases = None
-    def generate(self):
-        os.makedirs(self.data_folder, exist_ok = True)
-        self.generator_program.compile()
-        run_return_code = self.generator_program.run([str(seed), self.data_folder])
-        return run_return_code
-        # return 0
     def get_testcases(self, testcase_regex):
         if testcase_regex is None:
             testcase_regex = '*'
-        globbed_testcases = list(glob.glob(join(self.data_folder, testcase_regex + '.in')))
+        logger.verbose('Globbing ' + self.data_folder)
+        globbed_testcases = list(glob.glob(join(self.data_folder, testcase_regex + conf['in_ext'])))
         globbed_testcases.sort()
         self.testcases = [Testcase(x, self) for x in globbed_testcases]
         logger.verbose('Found ' + str(len(self.testcases)) + ' testcases.')
@@ -406,16 +418,16 @@ def bare_filename(file_location):
 def file_extension(file_location):
     return basename(file_location).split('.')[1]
 
-def get_file_or_folder(problem_folder, base_name):
+def get_file_or_folder(problem_folder, base_name, class_name=Program):
     for ext in conf['extensions']:
         base_file_path = join(problem_folder, base_name + ext)
         if exists(base_file_path):
-            return [Program(base_file_path)]
+            return [class_name(base_file_path)]
     base_folder_path = join(problem_folder, base_name)
     if exists(base_folder_path):
         res = []
         for ext in conf['extensions']:
-            res.extend([Program(x) for x in list(glob.glob(join(base_folder_path, '*'+ext)))])
+            res.extend([class_name(x) for x in list(glob.glob(join(base_folder_path, '*'+ext)))])
         return res
     return None
 
@@ -450,20 +462,19 @@ def compile_src(src_file, build_path):
         return exe_file
     raise Exception('Unknown source extension "' + extension + '" for file "' + src_file + '", and so algo does not know how to prepare it to be runnable.')
 
-def find_problem(problem_id):
+def find_problem_folder(problem_id):
     logger.verbose('Problem id: "' + problem_id + '"')
     # search in working directory
     location_path = realpath(join(working_directory, problem_id))
-    definition_path = join(location_path, conf['def_file'])
-    if exists(location_path) and exists(definition_path):
+    if exists(location_path):
         logger.debug('Problem found locally in "' + location_path + '"')
-        return definition_path
+        return location_path
     # search in default problem repository location
     repository_path_regex = join(problem_search_location, '**', problem_id, conf['def_file'])
     logger.debug('Repository path regex: "' + repository_path_regex + '"')
     for def_file in glob.glob(repository_path_regex, recursive=True):
-        # todo if found more problem, raise warning or error
-        return def_file
+        # todo if found more than one problem definition, raise a warning
+        return dirname(def_file)
     return None
 
 def print_file_contents(file_name, number_of_lines=20):

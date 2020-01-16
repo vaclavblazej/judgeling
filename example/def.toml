@@ -1,0 +1,3 @@
+name = "array sorting"
+input = "length of an array on the first line and list of its elements on the second line"
+output = "elements of the array in a nondecreasing order"
