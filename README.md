@@ -183,3 +183,23 @@ The structure is as follows.
     ...
 ```
 
+
+## Browser (work in progress)
+
+This set is bundled with web browser for this repository.
+It works by running a backend (python3 django) server which manages files in this repository and provides API to change them.
+The frontend (react) then hooks into this api, and displays the result.
+
+Setup by installing *python3* and *python's django* package.
+
+```bash
+apt install python3 python3-pip
+pip3 install django
+```
+
+Start it with the following command, which will give you further instructions.
+
+```bash
+todo ...
+```
+
