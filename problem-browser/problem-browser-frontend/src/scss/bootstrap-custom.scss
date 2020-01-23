@@ -1,0 +1,27 @@
+.container-fluid {
+  margin-right: auto;
+  margin-left: auto;
+  max-width: 1024px;
+}
+
+.container-body {
+  margin-top: 20px;
+}
+
+.submissions {
+  .SUBMITTED {
+    color: lightgreen;
+  }
+
+  .WRONG_ANSWER {
+    color: red;
+  }
+
+  .CORRECT {
+    color: lightgreen;
+  }
+
+  .TO_BE_CORRECTED {
+    color: white;
+  }
+}
