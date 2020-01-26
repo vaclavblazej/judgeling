@@ -5,7 +5,7 @@ const ReactMarkdown = require('react-markdown');
 
 const BrowsePage: React.FC = () => {
 
-  const [address, setAddress] = useState<string[]>(['']);
+  const [address, setAddress] = useState<string[]>(['', 'arrays', 'sort']);
 
   const [data, setData] = useState<ProblemDirectory>({'content': '', 'content_extension': '', 'directories': []});
   useEffect(() => {
@@ -16,15 +16,18 @@ const BrowsePage: React.FC = () => {
     });
   }, [address]);
 
+  const goBack = function (num: number): void {
+    let qq: string[] = address.slice();
+    for (let i = 0; i < num; ++i) qq.pop();
+    setAddress(qq)
+  };
 
   let goBackElement = (<></>);
   if (address.length > 1) { // is present only if we are not in the root directory
     goBackElement = (
       <tr>
         <th><a href='#' onClick={() => {
-          let qq: string[] = address.slice();
-          qq.pop();
-          setAddress(qq)
+          goBack(1);
         }}>..</a></th>
       </tr>
     );
@@ -53,10 +56,37 @@ const BrowsePage: React.FC = () => {
       </p>
     );
   }
+  let overview: JSX.Element[] = [];
+  if (data.parts) {
+    const paths = ['gen', 'val', 'jud', 'chk', 'sol', 'pic'];
+    overview = paths.map((item) => {
+      let style = 'btn-light';
+      if (data.parts[item].length === 0) style = 'btn-danger';
+      else if (data.parts[item].length === 1) style = 'btn-primary';
+      else if (data.parts[item].length >= 1) style = 'btn-success';
+      return (
+        <button type="button" className={'btn ' + style}>
+          {item} <span className="badge badge-light">{data.parts[item].length}</span>
+        </button>
+      )
+    });
+  }
+  let cnt = address.length;
+  const breadcrumbs = [address.map((item) => (
+    <li className="breadcrumb-item"><a href="#" onClick={() => goBack(cnt++)}>{item}</a></li>
+  ))];
 
   return (
     <div>
       <div className="d-flex justify-content-center h-100">
+        <div>
+          <nav aria-label="breadcrumb">
+            <ol className="breadcrumb">
+              {breadcrumbs}
+              {/*<li className="breadcrumb-item active" aria-current="page">Library</li>*/}
+            </ol>
+          </nav>
+        </div>
         <div className="table-responsive">
           <table className="table table-striped table-sm">
             <tbody>
@@ -67,6 +97,9 @@ const BrowsePage: React.FC = () => {
         </div>
       </div>
       {markdown}
+      <div>
+        {overview}
+      </div>
     </div>
   );
 };

@@ -4,6 +4,7 @@ export interface ProblemDirectory {
   readonly content: string;
   readonly content_extension: string;
   readonly directories: string[];
+  readonly parts?: any;
 }
 
 /*export interface Year {
