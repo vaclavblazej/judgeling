@@ -45,45 +45,8 @@ export function navigationMenu(): MenuItem[] {
     inferType({
       text: 'Browse',
       itemType: 'LINK',
-      link: '/browse',
+      link: '/problems',
       id: 1,
-    }),
-    inferType({
-      text: 'Soutěž',
-      itemType: 'DROPDOWN',
-      subitems: [
-        {
-          text: 'Aktuální ročník',
-          itemType: 'LINK',
-          link: '/rocnik',
-          id: 8,
-        },
-        {
-          text: 'Výsledky',
-          itemType: 'LINK',
-          link: '/vysledky',
-          id: 9,
-        },
-        {
-          text: 'Studijní materiály',
-          itemType: 'LINK',
-          link: '/p/studijni-materialy',
-          id: 2,
-        },
-        {
-          text: 'Soustředění',
-          itemType: 'LINK',
-          link: '/p/soustredeni',
-          id: 10,
-        },
-      ],
-      id: 20,
-    }),
-    inferType({
-      text: 'Fórum',
-      itemType: 'RAWLINK',
-      link: '/forum',
-      id: 10,
     }),
   ];
 }

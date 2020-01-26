@@ -1,7 +1,7 @@
 import React from 'react';
 import {NavLink} from "react-router-dom";
 
-const LoginPage: React.FC = () => {
+const Problem: React.FC = () => {
 
   return (
     <div>
@@ -37,4 +37,4 @@ const LoginPage: React.FC = () => {
   );
 };
 
-export default LoginPage;
+export default Problem;
