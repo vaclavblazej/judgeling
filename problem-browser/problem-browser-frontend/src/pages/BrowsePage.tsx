@@ -25,17 +25,15 @@ const BrowsePage: React.FC = () => {
   let goBackElement = (<></>);
   if (address.length > 1) { // is present only if we are not in the root directory
     goBackElement = (
-      <tr>
-        <th><a href='#' onClick={() => {
+        <button type="button" className="btn btn-primary btn-sm btn-block" onClick={() => {
           goBack(1);
-        }}>..</a></th>
-      </tr>
+        }}>..</button>
     );
   }
   const dirElements = data['directories'].map((dir: string) => (
-    <tr key={dir}>
-      <th><a href='#' onClick={() => setAddress(address.concat([encodeURI(dir)]))}>{dir}</a></th>
-    </tr>
+    <button key={dir} type="button" className="btn btn-primary btn-sm btn-block" onClick={() => {
+      setAddress(address.concat([encodeURI(dir)]));
+    }}>{dir}</button>
   ));
   let markdown;
   if (data.content) {
@@ -72,26 +70,20 @@ const BrowsePage: React.FC = () => {
     });
   }
   const breadcrumbs = [address.map((item, index) => (
-    <li key={index} className="breadcrumb-item"><a href="#" onClick={() => goBack(index)}>{item}</a></li>
+    <li key={index} className="breadcrumb-item"><a href="#" onClick={() => goBack(address.length-index)}>{item}</a></li>
   ))];
 
   return (
     <>
-      <div className="d-flex justify-content-center h-100">
-        <nav aria-label="breadcrumb">
-          <ol className="breadcrumb">
-            {breadcrumbs}
-            {/*<li className="breadcrumb-item active" aria-current="page">Library</li>*/}
-          </ol>
-        </nav>
-        <div className="table-responsive">
-          <table className="table table-striped table-sm">
-            <tbody>
-            {goBackElement}
-            {dirElements}
-            </tbody>
-          </table>
-        </div>
+      <nav aria-label="breadcrumb">
+        <ol className="breadcrumb">
+          {breadcrumbs}
+          {/*<li className="breadcrumb-item active" aria-current="page">Library</li>*/}
+        </ol>
+      </nav>
+      <div className="d-flex justify-content-center h-100" style={{flexFlow: 'column'}}>
+        {goBackElement}
+        {dirElements}
       </div>
       {markdown}
       <div>
