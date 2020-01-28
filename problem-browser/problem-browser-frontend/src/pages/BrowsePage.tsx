@@ -71,22 +71,19 @@ const BrowsePage: React.FC = () => {
       )
     });
   }
-  let cnt = address.length;
-  const breadcrumbs = [address.map((item) => (
-    <li className="breadcrumb-item"><a href="#" onClick={() => goBack(cnt++)}>{item}</a></li>
+  const breadcrumbs = [address.map((item, index) => (
+    <li key={index} className="breadcrumb-item"><a href="#" onClick={() => goBack(index)}>{item}</a></li>
   ))];
 
   return (
-    <div>
+    <>
       <div className="d-flex justify-content-center h-100">
-        <div>
-          <nav aria-label="breadcrumb">
-            <ol className="breadcrumb">
-              {breadcrumbs}
-              {/*<li className="breadcrumb-item active" aria-current="page">Library</li>*/}
-            </ol>
-          </nav>
-        </div>
+        <nav aria-label="breadcrumb">
+          <ol className="breadcrumb">
+            {breadcrumbs}
+            {/*<li className="breadcrumb-item active" aria-current="page">Library</li>*/}
+          </ol>
+        </nav>
         <div className="table-responsive">
           <table className="table table-striped table-sm">
             <tbody>
@@ -100,7 +97,7 @@ const BrowsePage: React.FC = () => {
       <div>
         {overview}
       </div>
-    </div>
+    </>
   );
 };
 
