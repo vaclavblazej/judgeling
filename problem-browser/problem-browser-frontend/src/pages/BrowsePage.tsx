@@ -1,15 +1,18 @@
 import React, {useEffect, useState} from 'react'
-import {getDirectory, ProblemDirectory} from "../api/api";
+import {ProblemDirectory} from "../api/api";
+import Breadcrumbs, {BreadcrumbElement} from "../components/Breadcrumbs";
 
 const ReactMarkdown = require('react-markdown');
 
 const BrowsePage: React.FC = () => {
 
-  const [address, setAddress] = useState<string[]>(['', 'arrays', 'sort']);
+  const repository = 'acm-problems';
+
+  const [address, setAddress] = useState<string[]>([repository, 'arrays', 'sort']);
 
   const [data, setData] = useState<ProblemDirectory>({'content': '', 'content_extension': '', 'directories': []});
   useEffect(() => {
-    fetch("api/problem" + address.join('/')).then(response => {
+    fetch("api/problem/" + address.slice(1).join('/')).then(response => {
       response.json().then((res) => {
         setData(res);
       });
@@ -25,15 +28,17 @@ const BrowsePage: React.FC = () => {
   let goBackElement = (<></>);
   if (address.length > 1) { // is present only if we are not in the root directory
     goBackElement = (
-        <button type="button" className="btn btn-primary btn-sm btn-block" onClick={() => {
-          goBack(1);
-        }}>..</button>
+      <button type="button" className="btn btn-primary btn-sm btn-block text-left" style={{marginTop: '1pt'}}
+              onClick={() => {
+                goBack(1);
+              }}>..</button>
     );
   }
   const dirElements = data['directories'].map((dir: string) => (
-    <button key={dir} type="button" className="btn btn-primary btn-sm btn-block" onClick={() => {
-      setAddress(address.concat([encodeURI(dir)]));
-    }}>{dir}</button>
+    <button key={dir} type="button" className="btn btn-primary btn-sm btn-block text-left" style={{marginTop: '1pt'}}
+            onClick={() => {
+              setAddress(address.concat([encodeURI(dir)]));
+            }}>{dir}</button>
   ));
   let markdown;
   if (data.content) {
@@ -69,18 +74,17 @@ const BrowsePage: React.FC = () => {
       )
     });
   }
-  const breadcrumbs = [address.map((item, index) => (
-    <li key={index} className="breadcrumb-item"><a href="#" onClick={() => goBack(address.length-index)}>{item}</a></li>
-  ))];
+  const breadcrumbs: BreadcrumbElement[] = address.map((item, index) => {
+    if (index !== address.length - 1) {
+      return {text: item, callback: () => goBack(address.length - index - 1)}
+    } else {
+      return {text: item};
+    }
+  });
 
   return (
     <>
-      <nav aria-label="breadcrumb">
-        <ol className="breadcrumb">
-          {breadcrumbs}
-          {/*<li className="breadcrumb-item active" aria-current="page">Library</li>*/}
-        </ol>
-      </nav>
+      <Breadcrumbs elements={breadcrumbs}/>
       <div className="d-flex justify-content-center h-100" style={{flexFlow: 'column'}}>
         {goBackElement}
         {dirElements}
