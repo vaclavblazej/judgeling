@@ -1,6 +1,7 @@
 from django.http import JsonResponse
 from django.core.files import File
 import os, os.path
+import glob
 
 def check_file(path: str) -> []:
     extensions = ['.c', '.cpp', '.py', '.java']
@@ -18,8 +19,12 @@ def retrieve(what: str) -> []:
         return os.listdir(what)
     return []
 
+def search(query):
+    for f in glob.glob('*' + query + '*'):
+        print(f)
 
-def index(request, address):
+def get_directory(request, address):
+    print('parameter q:' + str(request.GET.get('q', '')))
     print('request: ' + str(request))
     print('address: ' + str(address))
     s = ''

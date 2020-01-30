@@ -6,18 +6,20 @@ export interface Props {
 
 export interface BreadcrumbElement {
   readonly text: string;
-  readonly callback?: any;
+  readonly callback?: () => void;
 }
 
 const Breadcrumbs: React.FC<Props> = ({elements}) => {
 
-  const breadcrumbs = [elements.map((item, index) => {
-    const content = item.callback ? (
-      <a href="#" onClick={() => item.callback()}>{item.text}</a>
+  const breadcrumbs = [elements.map(({text, callback}, index) => {
+    const content = callback ? (
+      <a href="#" onClick={() => {
+        if (callback) callback()
+      }}>{text}</a>
     ) : (
-      <span>{item.text}</span>
+      <span>{text}</span>
     );
-    return (<li key={index} className={"breadcrumb-item" + (item.callback ? '' : ' active')}>{content}</li>)
+    return (<li key={index} className={"breadcrumb-item" + (callback ? '' : ' active')}>{content}</li>)
   })];
 
   return (

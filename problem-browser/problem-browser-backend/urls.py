@@ -20,6 +20,6 @@ from . import views
 urlpatterns = [
     # path('polls/', include('polls.urls')),
     # path('problem/', views.index, name='index'),
-    re_path('api/problem/(?P<address>[a-zA-Z0-9/\_\.]*)', views.index, name='index'),
+    re_path('api/problem/(?P<address>[a-zA-Z0-9/\_\.]*)', views.get_directory, name='get_directory'),
     path('admin/', admin.site.urls),
 ]

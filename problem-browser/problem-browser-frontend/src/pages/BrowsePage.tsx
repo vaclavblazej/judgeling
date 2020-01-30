@@ -1,8 +1,30 @@
 import React, {useEffect, useState} from 'react'
-import {ProblemDirectory} from "../api/api";
+import {getDirectory, ProblemDirectory} from "../api/api";
 import Breadcrumbs, {BreadcrumbElement} from "../components/Breadcrumbs";
+import ListBrowser, {BrowserElement} from "../components/ListBrowser";
 
 const ReactMarkdown = require('react-markdown');
+
+const prepareContent = (data: ProblemDirectory) => {
+  if (data.content) {
+    if (data.content_extension === '.md') {
+      return (
+        <div>
+          <ReactMarkdown source={data.content}/>
+        </div>
+      );
+    } else {
+      return (<code style={{whiteSpace: 'pre-wrap'}}>{data.content}</code>);
+    }
+  } else {
+    return (
+      <p>
+        This folder does not contain <code>index.md</code>, this file should contain either description of a problem or
+        category description for sets of problems.
+      </p>
+    );
+  }
+};
 
 const BrowsePage: React.FC = () => {
 
@@ -12,68 +34,51 @@ const BrowsePage: React.FC = () => {
 
   const [data, setData] = useState<ProblemDirectory>({'content': '', 'content_extension': '', 'directories': []});
   useEffect(() => {
-    fetch("api/problem/" + address.slice(1).join('/')).then(response => {
-      response.json().then((res) => {
-        setData(res);
-      });
+    getDirectory(address).then(response => {
+      setData(response);
     });
   }, [address]);
 
   const goBack = function (num: number): void {
-    let qq: string[] = address.slice();
-    for (let i = 0; i < num; ++i) qq.pop();
-    setAddress(qq)
+    let s: string[] = address.slice();
+    for (let i = 0; i < num; ++i) s.pop();
+    setAddress(s)
   };
 
-  let goBackElement = (<></>);
-  if (address.length > 1) { // is present only if we are not in the root directory
-    goBackElement = (
-      <button type="button" className="btn btn-primary btn-sm btn-block text-left" style={{marginTop: '1pt'}}
-              onClick={() => {
-                goBack(1);
-              }}>..</button>
-    );
-  }
-  const dirElements = data['directories'].map((dir: string) => (
-    <button key={dir} type="button" className="btn btn-primary btn-sm btn-block text-left" style={{marginTop: '1pt'}}
-            onClick={() => {
-              setAddress(address.concat([encodeURI(dir)]));
-            }}>{dir}</button>
-  ));
-  let markdown;
-  if (data.content) {
-    if (data.content_extension === '.md') {
-      markdown = (
-        <div>
-          <ReactMarkdown source={data.content}/>
-        </div>
-      );
-    } else {
-      markdown = (<code style={{whiteSpace: 'pre-wrap'}}>{data.content}</code>);
-    }
-  } else {
-    markdown = (
-      <p>
-        This folder does not contain <code>index.md</code>, this file should contain either description of a problem or
-        category description for sets of problems.
-      </p>
-    );
-  }
   let overview: JSX.Element[] = [];
   if (data.parts) {
     const paths = ['gen', 'val', 'jud', 'chk', 'sol', 'pic'];
     overview = paths.map((item) => {
       let style = 'btn-light';
       if (data.parts[item].length === 0) style = 'btn-danger';
-      else if (data.parts[item].length === 1) style = 'btn-primary';
       else if (data.parts[item].length >= 1) style = 'btn-success';
       return (
-        <button type="button" className={'btn ' + style}>
+        <button key={item} type="button" className={'btn ' + style}>
           {item} <span className="badge badge-light">{data.parts[item].length}</span>
         </button>
       )
     });
   }
+
+  let browser: BrowserElement[] = [];
+  if (address.length > 1) {
+    browser.push({
+      text: '..', callback: () => {
+        goBack(1);
+      }
+    });
+  }
+  browser = browser.concat(data['directories'].map((item) => {
+    return {
+      text: item,
+      callback: () => {
+        let s: string [] = address.slice();
+        s.push(item);
+        setAddress(s)
+      }
+    }
+  }));
+
   const breadcrumbs: BreadcrumbElement[] = address.map((item, index) => {
     if (index !== address.length - 1) {
       return {text: item, callback: () => goBack(address.length - index - 1)}
@@ -85,11 +90,8 @@ const BrowsePage: React.FC = () => {
   return (
     <>
       <Breadcrumbs elements={breadcrumbs}/>
-      <div className="d-flex justify-content-center h-100" style={{flexFlow: 'column'}}>
-        {goBackElement}
-        {dirElements}
-      </div>
-      {markdown}
+      <ListBrowser elements={browser}/>
+      {prepareContent(data)}
       <div>
         {overview}
       </div>
