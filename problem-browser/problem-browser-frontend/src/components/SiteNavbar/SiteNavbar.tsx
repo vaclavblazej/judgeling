@@ -1,14 +1,37 @@
-import React from 'react';
+import React, {useState} from 'react';
 import {Link} from 'react-router-dom';
 
 import {navigationMenu} from '../../api/menu';
 import MenuItemElement from './MenuItemElement';
+import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
+import {faSearch} from '@fortawesome/free-solid-svg-icons'
+import {searchProblems} from "../../api/api";
 
-const SiteNavbar: React.FC = () => {
+export interface Params {
+  readonly foundCallback?: (found: string[]) => any;
+}
+
+const SiteNavbar: React.FC<Params> = ({foundCallback}) => {
 
   const navigationMenuItems = navigationMenu().map((menuItem) => (
     <MenuItemElement menuItem={menuItem} key={menuItem.id}/>
   ));
+
+  const [query, setQuery] = useState('');
+
+  const searchElement = foundCallback ? (
+    <form className="form-inline input-group md-form form-sm form-2 pl-0">
+      <input className="form-control my-0 py-0" type="text" placeholder="Search" aria-label="Search"
+             onChange={(event => setQuery(event.target.value))}/>
+      <div className="input-group-append">
+        <button type="button" className="input-group-text red lighten-3"
+                onClick={() => searchProblems(query).then(response => foundCallback(response))}>
+          <FontAwesomeIcon icon={faSearch}/>
+          {/*<i className="fas fa-search text-grey" aria-hidden="true"/>*/}
+        </button>
+      </div>
+    </form>
+  ) : (<></>);
 
   return (
     <nav className="navbar navbar-expand-md navbar-dark bg-dark" id="site-navbar">
@@ -24,7 +47,7 @@ const SiteNavbar: React.FC = () => {
           <ul className="navbar-nav mr-auto">
             {navigationMenuItems}
           </ul>
-          <div className="dropdown-divider"/>
+          {searchElement}
         </div>
       </div>
     </nav>

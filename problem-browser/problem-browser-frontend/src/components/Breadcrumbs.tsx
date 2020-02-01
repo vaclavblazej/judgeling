@@ -13,11 +13,11 @@ const Breadcrumbs: React.FC<Props> = ({elements}) => {
 
   const breadcrumbs = [elements.map(({text, callback}, index) => {
     const content = callback ? (
-      <a href="#" onClick={() => {
+      <button type="button" className="btn btn-link p-0 m-0" onClick={() => {
         if (callback) callback()
-      }}>{text}</a>
+      }}>{text}</button>
     ) : (
-      <span>{text}</span>
+      <button type="button" className="btn btn-link p-0 m-0 disabled">{text}</button>
     );
     return (<li key={index} className={"breadcrumb-item" + (callback ? '' : ' active')}>{content}</li>)
   })];

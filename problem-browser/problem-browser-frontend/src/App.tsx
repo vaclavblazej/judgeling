@@ -9,12 +9,11 @@ const App: React.FC = () => {
   return (
     <BrowserRouter>
       <div id="App">
-        <SiteNavbar/>
+        <SiteNavbar foundCallback={(found => console.log(found))}/>
         <main className="container-fluid container-body">
           <Switch>
             <Route exact path="/" component={BrowsePage}/>
             <Route exact path="/problems" component={BrowsePage}/>
-            {/*<Route exact path="/vysledky" component={} />*/}
           </Switch>
         </main>
       </div>

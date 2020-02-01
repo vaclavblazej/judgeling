@@ -21,5 +21,7 @@ urlpatterns = [
     # path('polls/', include('polls.urls')),
     # path('problem/', views.index, name='index'),
     re_path('api/problem/(?P<address>[a-zA-Z0-9/\_\.]*)', views.get_directory, name='get_directory'),
+    path('api/search', views.search, name='search_problem'),
+    path('api/rename', views.rename, name='rename_folder'),
     path('admin/', admin.site.urls),
 ]

@@ -3,6 +3,8 @@ from django.core.files import File
 import os, os.path
 import glob
 
+repo_path = '../../acm-problems/problems'
+
 def check_file(path: str) -> []:
     extensions = ['.c', '.cpp', '.py', '.java']
     for ext in extensions:
@@ -19,16 +21,28 @@ def retrieve(what: str) -> []:
         return os.listdir(what)
     return []
 
-def search(query):
-    for f in glob.glob('*' + query + '*'):
-        print(f)
+def rename(request):
+    rename_from = os.path.join(repo_path, request.GET.get('from'))
+    rename_to = os.path.join(repo_path, request.GET.get('to'))
+    response = {}
+    if os.path.exists(rename_to):
+        return JsonResponse({'error': 'target location is not empty'})
+    if os.path.isdir(rename_from) or os.path.isfile(rename_from):
+        os.rename(rename_from, rename_to)
+    return JsonResponse(response)
+
+def search(request):
+    query = request.GET.get('query', '')
+    response = {}
+    found_entries = glob.glob(os.path.join(repo_path, '**', '*' + query + '*'), recursive=True)
+    response['found'] = found_entries
+    return JsonResponse(response)
 
 def get_directory(request, address):
-    print('parameter q:' + str(request.GET.get('q', '')))
     print('request: ' + str(request))
     print('address: ' + str(address))
     s = ''
-    path = os.path.join('../../acm-problems/problems', address)
+    path = os.path.join(repo_path, address)
     response = {}
     response['content']=None
     response['content_extension']=None
@@ -72,7 +86,7 @@ def get_directory(request, address):
             with open(os.path.join(path), 'r') as f:
                 f = File(f)
                 s = f.read()
-                response['content'] =s
+                response['content'] = s
                 filename, extension = os.path.splitext(path)
                 response['content_extension'] = extension
     except FileNotFoundError: pass
