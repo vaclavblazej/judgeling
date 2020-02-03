@@ -113,8 +113,9 @@ def main():
         # logger.info('Scan for ' + problem_flag + ' found ' + str(len(found)) + ' solutions')
         # solutions.extend([Solution(f) for f in found])
     if len(solutions) == 0:
-        logger.verbose('Problem information contained in: ' + problem_def_path)
-        print_file_contents(problem_def_path)
+        if exists(problem_def_path):
+            logger.verbose('Problem information contained in: ' + problem_def_path)
+            print_file_contents(problem_def_path)
         logger.info('To test your solution, add -S <solution_file> to the arguments.')
         return SUCCESSFULL_EXECUTION
 
