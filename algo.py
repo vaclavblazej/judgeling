@@ -2,7 +2,7 @@
 # if possible, keep this file under 1000 lines
 
 # get datasets from folder names in .tmp/data/
-# allow input files or folders to be passed via arguments
+# commandline autocompletion
 # add precise time measurements
 # allow cross checking of user's solutions
 # enable generator to supply inputs without saving them
@@ -18,8 +18,9 @@ import resource # unix specific, for measuring time, see https://stackoverflow.c
 from os.path import * # frequent functions: join, exists, dirname, realpath, etc.
 
 SUCCESSFULL_EXECUTION = 0
-USER_ERROR = 1
-PROBLEM_ERROR = 2
+USER_ERROR = 1 # argument format is fine, but content is wrong
+PROBLEM_ERROR = 2 # content of problem definition is wrong
+INVALID_ARGUMENT = 129 # argument format is wrong
 
 OK = 0
 WRONG_ANSWER = 1
@@ -31,7 +32,13 @@ DEFAULT_FLAG = 88
 
 VERBOSE_LEVEL = 15
 QUIET_LEVEL = 60
-parser = argparse.ArgumentParser(description='Test algorithm implementations against problem definitions')
+
+class ArgumentParser(argparse.ArgumentParser): # bad argument exit code override
+    def error(self, message):
+        self.print_usage(sys.stderr)
+        self.exit(INVALID_ARGUMENT, '%s: error: %s\n' % (self.prog, message))
+
+parser = ArgumentParser(description='Test algorithm implementations against problem definitions')
 parser.add_argument('-P', '--problem', dest='problem_id', help='problem definition to be run')
 parser.add_argument('-S', '--solution', dest='solution', nargs='+', help='user\'s files with his own solutions to the problem')
 parser.add_argument('-D', '--dataset', dest='dataset_regex', help='a dataset of testcases which should be run')
@@ -63,8 +70,8 @@ def main():
     if args.logging_level: conf['logging_level'] = args.logging_level
     logger.setLevel(conf['logging_level'])
     logger.debug('Configuration: ' + str(conf))
-    logger.debug('Script folder: ' + script_path)
-    logger.debug('Working directory: ' + working_directory)
+    logger.debug('Script folder: ' + uv(script_path))
+    logger.debug('Working directory: ' + uv(working_directory))
     logger.debug('Arguments: ' + str(sys.argv))
 
     if args.version:
@@ -79,11 +86,11 @@ def main():
 
     problem_folder = find_problem_folder(problem_id)
     if not problem_folder:
-        logger.error('Unable to locate the problem definition file for "' + problem_id + '"')
+        logger.error('Unable to locate the problem definition file for ' + uv(problem_id))
         return USER_ERROR
     problem_def_path = join(problem_folder, conf['def_file'])
     if not exists(problem_def_path):
-        logger.warning('Problem found locally, but is missing a definition file: "' + problem_folder + '"')
+        logger.warning('Problem found locally, but is missing a definition file: ' + uv(problem_folder))
 
     global data_path, build_path
     data_path = join(problem_folder, conf['problem_tmp_folder'], 'data')
@@ -99,7 +106,7 @@ def main():
             if exists(solution_path):
                 solutions.append(Solution(solution_path))
             else:
-                logger.error('Supplied solution file does not exist: "' + solution_path + '"')
+                logger.error('Supplied solution file does not exist: ' + uv(solution_path))
                 return USER_ERROR
 
     # if args.scan:
@@ -162,18 +169,31 @@ def main():
     if args.seed: seed = args.seed
     logger.verbose('Seed: ' + str(seed))
 
-    for generator in generators:
-        # todo input flag to force dataset generation
-        # todo hash problem definition, if changed -> generate dataset again
-        # when should we regenerate inputs ? -- generator changed, different seed ?
-        logger.debug('Generator output folder: ' + generator.data_folder)
-        if generator.generate() != 0:
-            logger.critical('Problem dataset generator "' + generator.name + '" has trouble running, contact the problem setter about this issue.')
-            return PROBLEM_ERROR
+    manual_input_files = args.input
+    if manual_input_files:
+        logger.verbose('Following inputs were supplied: ' + uv(manual_input_files))
+        manual_input_folder = join(data_path, conf['manual_testcases_folder_name'])
+        os.makedirs(manual_input_folder, exist_ok=True)
+        for manual_input_file in manual_input_files:
+            if exists(manual_input_file):
+                shutil.copy(manual_input_file, join(manual_input_folder, basename(manual_input_file)))
+            else:
+                logger.error('Supplied input file ' + uv(manual_input_file) + ' could not be found')
+        datasets = [Dataset(manual_input_folder)]
+    else:
+        for generator in generators:
+            # todo input flag to force dataset generation
+            # todo hash problem definition, if changed -> generate dataset again
+            # when should we regenerate inputs ? -- generator changed, different seed ?
+            logger.debug('Generator output folder: ' + generator.data_folder)
+            if generator.generate() != 0:
+                logger.critical('Problem dataset generator "' + generator.name + '" has trouble running, contact the problem setter about this issue.')
+                return PROBLEM_ERROR
 
-    datasets = [Dataset(g.data_folder) for g in generators]
-    if args.dataset_regex:
-        datasets = [d for d in datasets if re.search(args.dataset_regex, d.name)]
+        datasets = [Dataset(g.data_folder) for g in generators]
+        if args.dataset_regex:
+            datasets = [d for d in datasets if re.search(args.dataset_regex, d.name)]
+
     for dataset in datasets:
         dataset.get_testcases(args.testcase_regex)
 
@@ -219,7 +239,7 @@ def main():
             if len(viable_solutions) == 0:
                 logger.info('All solutions were disqualified, skipping rest of testcases for this dataset.')
                 break
-            logger.info('Testcase: "' + testcase.name + '"')
+            logger.info('Testcase: ' + uv(testcase.name))
             for solution in viable_solutions:
                 solution_out_dir = join(dataset.data_folder, 'sol', solution.name)
                 os.makedirs(solution_out_dir, exist_ok=True)
@@ -259,7 +279,7 @@ def main():
                     logger.critical('The testing program returned a code for bad invocation. This means algo did not manage to run this program correctly. "' + mechanism + '" is probably writen incorrectly. If you think this is not the case, contact algo developers.')
                     return PROBLEM_ERROR
                 else:
-                    logger.error('"' + mechanism + '" gave an invalid return code: "' + str(result) + '"')
+                    logger.error(uv(mechanism) + ' gave an invalid return code: ' + uv(result))
                     return PROBLEM_ERROR
                 if result != OK:
                     # todo split results depending on retun code, and report correct error messages in summary
@@ -280,6 +300,12 @@ def main():
         else:
             res_string = 'OK'
         logger.info(solution.name + ' (time ' + str(round(solution.timer.get_total(), 3)) + 's, max ' + str(round(solution.timer.get_max(), 3)) + 's): ' + res_string)
+    return SUCCESSFULL_EXECUTION
+
+# == Formatting ==================================================================
+
+def uv(to_print):
+    return '"' + str(to_print) + '"'
 
 # == Structure ===================================================================
 
@@ -453,26 +479,26 @@ def compile_src(src_file, build_path):
         if new_src_hash == old_src_hash and exists(exe_file):
             logger.verbose('Skipped compilation of "' + basename(src_file) + '" due to non-changed source file.')
             return exe_file
-        logger.info('Compiling: "' + basename(src_file) + '"')
-        logger.verbose('Compile destination: "' + exe_file + '"')
+        logger.info('Compiling: ' + uv(basename(src_file)))
+        logger.verbose('Compile destination: ' + uv(exe_file))
         res = subprocess.run(compilation)
         if res.returncode != 0:
-            raise Exception('Unable to compile source code: "' + src_file + '"')
+            raise Exception('Unable to compile source code: ' + uv(src_file))
         logger.verbose('Compilation return code: ' + str(res.returncode))
         save_content(hash_location, new_src_hash);
         return exe_file
     raise Exception('Unknown source extension "' + extension + '" for file "' + src_file + '", and so algo does not know how to prepare it to be runnable.')
 
 def find_problem_folder(problem_id):
-    logger.verbose('Problem id: "' + problem_id + '"')
+    logger.verbose('Problem id: ' + uv(problem_id))
     # search in working directory
     location_path = realpath(join(working_directory, problem_id))
     if exists(location_path):
-        logger.debug('Problem found locally in "' + location_path + '"')
+        logger.debug('Problem found locally in ' + uv(location_path))
         return location_path
     # search in default problem repository location
     repository_path_regex = join(problem_search_location, '**', problem_id, conf['def_file'])
-    logger.debug('Repository path regex: "' + repository_path_regex + '"')
+    logger.debug('Repository path regex: ' + uv(repository_path_regex))
     for def_file in glob.glob(repository_path_regex, recursive=True):
         # todo if found more than one problem definition, raise a warning
         return dirname(def_file)
@@ -507,14 +533,14 @@ def save_content(file_location, content):
         f.write(content)
 
 def hash_file(file_location):
-    BUF_SIZE = 65536  # lets read stuff in 64kb chunks!
+    BUF_SIZE = pow(2,16) # reads data in 64kb chunks
     sha1 = hashlib.sha1()
     with open(file_location, 'rb') as f:
         while True:
             data = f.read(BUF_SIZE)
             if not data: break
             sha1.update(data)
-    logger.debug('Hashed "' + file_location + '" into "' + sha1.hexdigest() + '"')
+    logger.debug('Hashed ' + uv(file_location) + ' into ' + uv(sha1.hexdigest()))
     return sha1.hexdigest()
 
 # == Core Script Logic Chunks ====================================================
@@ -545,7 +571,7 @@ def validate_testcases(validators, datasets):
                 if validators:
                     for validator in validators:
                         if validator.run([], testcase.input) != 0:
-                            logger.error('Testcase "' + dataset.name + '/' + testcase.name + '" is INVALID, according to validator "' + validator.name + '"')
+                            logger.error('Testcase "' + dataset.name + '/' + testcase.name + '" is INVALID, according to validator ' + uv(validator.name))
                             return False
         logger.info('All testcases were validated successfully')
     return True
@@ -553,5 +579,5 @@ def validate_testcases(validators, datasets):
 # ================================================================================
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())
 

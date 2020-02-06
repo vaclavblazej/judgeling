@@ -5,4 +5,5 @@ data/
 config_local.json
 *.pyc
 *.swp
+__pycache__/
 
