@@ -2,7 +2,6 @@
 # if possible, keep this file under 1000 lines
 
 # get datasets from folder names in .tmp/data/
-# commandline autocompletion
 # add precise time measurements
 # allow cross checking of user's solutions
 # enable generator to supply inputs without saving them
@@ -59,7 +58,7 @@ working_directory = os.getcwd()
 global_config_folder = join(script_path, 'config.json')
 local_config_folder = join(script_path, 'config_local.json')
 problem_search_location = realpath(join(script_path, '..', 'acm-problems/problems'))
-version = '0.1.2'
+version = '0.1.3'
 
 # == Main Logic ==================================================================
 
@@ -576,7 +575,16 @@ def validate_testcases(validators, datasets):
         logger.info('All testcases were validated successfully')
     return True
 
-# ================================================================================
+# == Main invocation =============================================================
+
+# to enable autocomplete do the following
+# install argcomplete: pip3 install argcomplete
+# add to .bashrc: eval "$(register-python-argcomplete algo)"
+# create either alias or symlink named "algo" to this file
+try:
+    import argcomplete
+    argcomplete.autocomplete(parser)
+except ModuleNotFoundError: pass
 
 if __name__ == '__main__':
     sys.exit(main())
