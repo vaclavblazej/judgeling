@@ -9,7 +9,7 @@
 # option to define dataset size ?
 # repositories with problems ?
 # static dataset ?
-# simplification of testcases to find small bad testcase ?
+# simplification of testcases to find small bad testcase - 'cut' or 'min' program
 # scan for solutions ?
 # add command to generate problem definition scaffolding ?
 
@@ -41,12 +41,12 @@ class ArgumentParser(argparse.ArgumentParser): # bad argument exit code override
 parser = ArgumentParser(description='Test algorithm implementations against problem definitions')
 parser.add_argument('-P', '--problem', dest='problem_id', help='problem definition to be run')
 parser.add_argument('-S', '--solution', dest='solution', nargs='+', help='user\'s files with his own solutions to the problem')
-parser.add_argument('-D', '--dataset', dest='dataset_regex', help='a dataset of testcases which should be run')
-parser.add_argument('-T', '--testcase', dest='testcase_regex', help='testcase which should be run')
+parser.add_argument('-D', '--dataset', dest='dataset_regex', help='filter used datasets using regex')
+parser.add_argument('-T', '--testcase', dest='testcase_regex', help='filter used testcases using regex')
 # parser.add_argument('-s', '--scan', dest='scan', action='store_true', help='scan current folder for files solving the problem')
-parser.add_argument('--seed', dest='seed', help='provide a fixed seed for the random data generation')
-parser.add_argument('--draw', dest='draw', action='store_true', help='will draw testcases using pic program')
-parser.add_argument('--input', dest='input', nargs='+', help='supplies the input data as list of files')
+parser.add_argument('--seed', dest='seed', help='provide a rng seed for dataset generators')
+parser.add_argument('--draw', dest='draw', action='store_true', help='creates drawings of testcases using pic program')
+parser.add_argument('--input', dest='input', nargs='+', help='supplies input data files manually')
 # parser.add_argument('--regenerate', dest='regenerate', action='store_true', help='force the generators to run again')
 parser.add_argument('-q', '--quiet', dest='logging_level', const=QUIET_LEVEL, action='store_const', help='no output will be shown')
 parser.add_argument('-v', '--verbose', dest='logging_level', const=VERBOSE_LEVEL, action='store_const', help='more detailed info about testing shown')
@@ -59,7 +59,7 @@ working_directory = os.getcwd()
 global_config_folder = join(script_path, 'config.json')
 local_config_folder = join(script_path, 'config_local.json')
 problem_search_location = realpath(join(script_path, '..', 'acm-problems/problems'))
-version = '0.1.1'
+version = '0.1.2'
 
 # == Main Logic ==================================================================
 

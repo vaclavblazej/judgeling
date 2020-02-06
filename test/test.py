@@ -26,6 +26,8 @@ def run(args=[], input_file=None, output_file=None, error_file=None, timeout=Non
 
 class TestCall(unittest.TestCase):
 
+    # == return codes ================================================================
+
     def test_return_codes_are_zero_no_param(self):
         self.assertEqual(run(), algo.SUCCESSFULL_EXECUTION)
 
@@ -38,6 +40,9 @@ class TestCall(unittest.TestCase):
     def test_return_codes_are_zero_quiet(self):
         self.assertEqual(run(['-q']), algo.SUCCESSFULL_EXECUTION)
 
+    def test_return_codes_are_zero_help(self):
+        self.assertEqual(run(['-h']), algo.SUCCESSFULL_EXECUTION)
+
     def test_return_codes_are_zero_version(self):
         self.assertEqual(run(['--version']), algo.SUCCESSFULL_EXECUTION)
 
@@ -49,6 +54,8 @@ class TestCall(unittest.TestCase):
 
     def test_bad_argument_return_code_incorrect_problem(self):
         self.assertEqual(run(['-P', 'non_existant']), algo.USER_ERROR)
+
+    # == return codes ================================================================
 
 if __name__ == '__main__':
     unittest.main()
