@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-# if possible, keep this file under 1000 lines
+# if possible, keep the program in single file with at most 1000 lines
 
 # get datasets from folder names in .tmp/data/
+# fix - when changing generator to have less testcases, old ones are not removed
 # add precise time measurements
 # add java
 # allow cross checking of user's solutions
@@ -22,13 +23,6 @@ USER_ERROR = 1 # argument format is fine, but content is wrong
 PROBLEM_ERROR = 2 # content of problem definition is wrong
 INVALID_ARGUMENT = 129 # argument format is wrong
 
-OK = 0
-WRONG_ANSWER = 1
-PRESENTATION_ERROR = 2
-TIMELIMIT_EXCEEDED = 3
-RUNTIME_ERROR = 4
-BAD_INVOCATION = 43
-DEFAULT_FLAG = 88
 
 VERBOSE_LEVEL = 15
 QUIET_LEVEL = 60
@@ -65,6 +59,7 @@ version = '0.1.3'
 
 def main():
     configure()
+    global args
     args = parser.parse_args()
     setup_logging()
     if args.logging_level: conf['logging_level'] = args.logging_level
@@ -182,15 +177,12 @@ def main():
                 logger.error('Supplied input file ' + uv(manual_input_file) + ' could not be found')
         datasets = [Dataset(manual_input_folder)]
     else:
-        if args.dataset_regex:
+        if not args.force_generation and args.dataset_regex:
             generators = [g for g in generators if re.search(args.dataset_regex, g.name)]
         for generator in generators:
-            # todo input flag to force dataset generation
-            # todo hash problem definition, if changed -> generate dataset again
-            # when should we regenerate inputs ? -- generator changed, different seed ?
             logger.debug('Generator output folder: ' + generator.data_folder)
             if generator.generate() != 0:
-                logger.critical('Problem dataset generator "' + generator.name + '" has trouble running, contact the problem setter about this issue.')
+                logger.critical('Problem dataset generator ' + uv(generator.name) + ' has trouble running, contact the problem setter about this issue.')
                 return PROBLEM_ERROR
 
         datasets = [Dataset(g.data_folder) for g in generators]
@@ -228,7 +220,7 @@ def main():
             for testcase in list(itertools.chain(*[dataset.testcases for dataset in datasets])):
                 logger.info('Drawing testcase ' + testcase.dataset.name + '/' + testcase.name)
                 if painter.run([testcase.drawing, testcase.input, testcase.correct_output], None, paint_outfile) != 0:
-                    logger.error('Unable to draw testcase "' + testcase.input + '", interrupting drawing.')
+                    logger.error('Unable to draw testcase ' + uv(testcase.input) + ', interrupting drawing.')
                     break;
         else:
             logger.info('Available painter, add --draw flag to allow painter to draw testcases (can take a long time).')
@@ -248,43 +240,39 @@ def main():
                 os.makedirs(solution_out_dir, exist_ok=True)
                 solution_testcase_out = join(solution_out_dir, testcase.name + conf['out_ext'])
                 time_result_file = join(solution_out_dir, conf['statistics_file_name'])
-                result = DEFAULT_FLAG
+                result = Results.DEFAULT_FLAG.value
                 try:
                     solution.timer.start()
                     return_code = solution.run([time_result_file], testcase.input, solution_testcase_out, conf['time_limit_seconds'])
                     solution.timer.stop()
                     if return_code != 0:
-                        logger.info('The program returned "' + str(return_code) + '", and output >>>')
+                        logger.info('The program returned ' + uv(return_code) + ' (should return 0), and output >>>')
                         print_file_contents(solution_testcase_out)
                         logger.info('<<<')
-                        result = RUNTIME_ERROR
+                        result = Results.RUNTIME_ERROR.value
                         solution.disqualified = True
                 except subprocess.TimeoutExpired as ex:
                     solution.timer.stop()
-                    result = TIMELIMIT_EXCEEDED
+                    result = Results.TIMELIMIT_EXCEEDED.value
                     solution.disqualified = True
-                if result == DEFAULT_FLAG:
+                if result == Results.DEFAULT_FLAG.value:
                     if mechanism == Mechanism.judge:
                         result = judges[0].run([testcase.input, solution_testcase_out])
                     elif mechanism == Mechanism.checker:
                         result = checkers[0].run([testcase.correct_output, solution_testcase_out])
-                if result == OK:
-                    logger.verbose('OK')
-                elif result == WRONG_ANSWER:
-                    logger.error('WRONG ANSWER')
-                elif result == PRESENTATION_ERROR:
-                    logger.error('PRESENTATION ERROR')
-                elif result == RUNTIME_ERROR:
-                    logger.error('RUNTIME ERROR')
-                elif result == TIMELIMIT_EXCEEDED:
-                    logger.error('TIMELIMIT EXCEEDED')
-                elif result == BAD_INVOCATION:
-                    logger.critical('The testing program returned a code for bad invocation. This means algo did not manage to run this program correctly. "' + mechanism + '" is probably writen incorrectly. If you think this is not the case, contact algo developers.')
+                print(result)
+                print(Results.OK.value)
+                if result == Results.OK.value:
+                    logger.verbose(solution.name + " OK")
+                elif result in [Results.WRONG_ANSWER.value, Results.PRESENTATION_ERROR.value, Results.RUNTIME_ERROR.value, Results.TIMELIMIT_EXCEEDED.value]:
+                    logger.error(result.long_string) # todo FIX the output message
+                elif result == Results.BAD_INVOCATION.value:
+                    logger.critical('The testing program returned a code for bad invocation. This means algo did not manage to run this program correctly. ' + uv(mechanism) + ' is probably writen incorrectly. If you think this is not the case, contact algo developers.')
                     return PROBLEM_ERROR
                 else:
                     logger.error(uv(mechanism) + ' gave an invalid return code: ' + uv(result))
                     return PROBLEM_ERROR
-                if result != OK:
+                if result != Results.OK.value:
                     # todo split results depending on retun code, and report correct error messages in summary
                     solution.bad_testcases.append(BadTestResult(testcase, result))
                     logger.info('Input:')
@@ -319,7 +307,7 @@ class Program:
     def compile(self):
         self.exe = compile_src(self.source_file, build_path)
     def run(self, args=[], input_file=None, output_file=None, timeout=None):
-        logger.debug('Running: "' + self.name + '", arguments: ' + str([self.exe] + args))
+        logger.debug('Running: ' + uv(self.name) + ', arguments: ' + str([self.exe] + args))
         if input_file: logger.debug('Input: ' + input_file)
         if output_file: logger.debug('Output: ' + output_file)
         if timeout: logger.debug('Timeout: ' + str(timeout))
@@ -351,6 +339,13 @@ class Generator(Program):
     def generate(self):
         os.makedirs(self.data_folder, exist_ok = True)
         self.compile()
+        hash_location = join(self.data_folder, self.name + '.hash')
+        new_src_hash = hash_file(self.source_file)
+        old_src_hash = retrieve_content(hash_location)
+        if not args.force_generation and new_src_hash == old_src_hash:
+            logger.verbose('Skipped generation of ' + uv(self.name) + ' due to non-changed source file.')
+            return 0
+        save_content(hash_location, new_src_hash)
         run_return_code = self.run([str(seed), self.data_folder])
         return run_return_code
 
@@ -402,20 +397,35 @@ class BadTestResult:
         self.result_code = result_code
     def str(self):
         additional_str = ''
-        if self.result_code == WRONG_ANSWER:
+        if self.result_code == Results.WRONG_ANSWER:
             additional_str = 'WA'
-        elif self.result_code == PRESENTATION_ERROR:
+        elif self.result_code == Results.PRESENTATION_ERROR:
             additional_str = 'PE'
-        elif self.result_code == RUNTIME_ERROR:
+        elif self.result_code == Results.RUNTIME_ERROR:
             additional_str = 'RTE'
-        elif self.result_code == TIMELIMIT_EXCEEDED:
+        elif self.result_code == Results.TIMELIMIT_EXCEEDED:
             additional_str = 'TLE'
         return '[' + self.testcase.dataset.name + '/' + self.testcase.name + ' ' + additional_str + ']'
 
 class Mechanism(enum.Enum):
-   judge = 'judge'
-   checker = 'checker'
-   cross_check = 'cross_check'
+    judge = 'judge'
+    checker = 'checker'
+    cross_check = 'cross_check'
+
+class Result:
+    def __init__(self, value : int, long_string : str, short_string : str):
+        self.value = value
+        self.short_string = short_string
+        self.long_string = long_string
+
+class Results(enum.Enum):
+    OK = Result(0, 'OK', 'OK')
+    WRONG_ANSWER = Result(1, 'WRONG ANSWER', 'WA')
+    PRESENTATION_ERROR = Result(2, 'PRESENTATION ERROR', 'PE')
+    TIMELIMIT_EXCEEDED = Result(3, 'TIMELIMIT EXCEEDED', 'TLE')
+    RUNTIME_ERROR = Result(4, 'RUNTIME ERROR', 'RE')
+    BAD_INVOCATION = Result(43, 'BAD INVOCATION', 'BAD')
+    DEFAULT_FLAG = Result(88, 'DEFAULT', 'DEF')
 
 # == Configuration ===============================================================
 
@@ -485,7 +495,7 @@ def compile_src(src_file, build_path):
         new_src_hash = hash_file(src_file)
         old_src_hash = retrieve_content(hash_location)
         if new_src_hash == old_src_hash and exists(exe_file):
-            logger.verbose('Skipped compilation of "' + basename(src_file) + '" due to non-changed source file.')
+            logger.verbose('Skipped compilation of ' + uv(basename(src_file)) + ' due to non-changed source file.')
             return exe_file
         logger.info('Compiling: ' + uv(basename(src_file)))
         logger.verbose('Compile destination: ' + uv(exe_file))
@@ -495,13 +505,14 @@ def compile_src(src_file, build_path):
         logger.verbose('Compilation return code: ' + str(res.returncode))
         save_content(hash_location, new_src_hash)
         return exe_file
-    raise Exception('Unknown source extension "' + extension + '" for file "' + src_file + '", and so algo does not know how to prepare it to be runnable.')
+    raise Exception('Unknown source extension ' + uv(extension) + ' for file ' + uv(src_file) + ', and so algo does not know how to prepare it to be runnable.')
 
 def do_if_changed(src_file : str, changed_callback, not_changed_callback) -> bool:
     base_src_name = bare_filename(src_file)
     hash_location = join(build_path, base_src_name + '.hash')
     new_src_hash = hash_file(src_file)
     old_src_hash = retrieve_content(hash_location)
+    # how the hell can we include the "exists" condition in this generalized function?
     if new_src_hash == old_src_hash and exists(exe_file):
         return not_changed_callback()
     result = changed_callback()
@@ -590,7 +601,7 @@ def validate_testcases(validators, datasets):
                 if validators:
                     for validator in validators:
                         if validator.run([], testcase.input) != 0:
-                            logger.error('Testcase "' + dataset.name + '/' + testcase.name + '" is INVALID, according to validator ' + uv(validator.name))
+                            logger.error('Testcase ' + uv(dataset.name + '/' + testcase.name) + ' is INVALID, according to validator ' + uv(validator.name))
                             return False
         logger.info('All testcases were validated successfully')
     return True
@@ -607,5 +618,9 @@ try:
 except ModuleNotFoundError: pass
 
 if __name__ == '__main__':
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        print()
+        logger.critical('Manually interrupted!')
 

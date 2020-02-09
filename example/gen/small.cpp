@@ -1,10 +1,10 @@
-#include "../../../gen.h"
+#include "gen.h"
 
 int main(int argc, char **argv){
     TestcaseGenerator tg(argc, argv);
     const ll MAX=1000;
-    ll N=300;
-    for(int i=0; i<10; ++i){
+    ll N=200;
+    for(int i=0; i<4; ++i){
         for(int j=0; j<5; ++j){
             tg.newCase();
             vector<ll> a(N);
