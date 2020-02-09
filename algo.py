@@ -3,6 +3,7 @@
 
 # get datasets from folder names in .tmp/data/
 # add precise time measurements
+# add java
 # allow cross checking of user's solutions
 # enable generator to supply inputs without saving them
 # option to define dataset size ?
@@ -12,7 +13,7 @@
 # scan for solutions ?
 # add command to generate problem definition scaffolding ?
 
-import os, sys, argparse, logging, glob, subprocess, random, re, hashlib, json, shutil, itertools
+import os, sys, argparse, logging, glob, subprocess, random, re, hashlib, json, shutil, itertools, enum
 import resource # unix specific, for measuring time, see https://stackoverflow.com/questions/16701310/get-how-much-time-python-subprocess-spends/16701365
 from os.path import * # frequent functions: join, exists, dirname, realpath, etc.
 
@@ -46,7 +47,7 @@ parser.add_argument('-T', '--testcase', dest='testcase_regex', help='filter used
 parser.add_argument('--seed', dest='seed', help='provide a rng seed for dataset generators')
 parser.add_argument('--draw', dest='draw', action='store_true', help='creates drawings of testcases using pic program')
 parser.add_argument('--input', dest='input', nargs='+', help='supplies input data files manually')
-# parser.add_argument('--regenerate', dest='regenerate', action='store_true', help='force the generators to run again')
+parser.add_argument('-g', '--force-gen', dest='force_generation', action='store_true', help='force the data generators to run again')
 parser.add_argument('-q', '--quiet', dest='logging_level', const=QUIET_LEVEL, action='store_const', help='no output will be shown')
 parser.add_argument('-v', '--verbose', dest='logging_level', const=VERBOSE_LEVEL, action='store_const', help='more detailed info about testing shown')
 parser.add_argument('-d', '--debug', dest='logging_level', const=logging.DEBUG, action='store_const', help='very detailed messages of script\'s inner workings')
@@ -129,8 +130,9 @@ def main():
         solution.compile()
 
     # generates input datasets
-    generators = get_file_or_folder(problem_folder, 'gen')
-    if generators: generators = [Generator(g.source_file) for g in generators]
+    generator_files = get_file_or_folder(problem_folder, 'gen')
+    generators = None
+    if generator_files: generators = [Generator(g.source_file) for g in generator_files]
     # gets the input and determines if it matches the problem definition
     validators = get_file_or_folder(problem_folder, 'val')
     # creates visual representation of inputs
@@ -160,7 +162,7 @@ def main():
         logger.critical('This is an issue with the problem definition, contact the author.')
         logger.critical('To fix this: create either a "judge" or "checker and referential solution"')
         return PROBLEM_ERROR
-    logger.verbose('The checking mechanism is: ' + mechanism)
+    logger.verbose('The checking mechanism is: ' + uv(mechanism))
 
     random.seed()
     global seed
@@ -180,6 +182,8 @@ def main():
                 logger.error('Supplied input file ' + uv(manual_input_file) + ' could not be found')
         datasets = [Dataset(manual_input_folder)]
     else:
+        if args.dataset_regex:
+            generators = [g for g in generators if re.search(args.dataset_regex, g.name)]
         for generator in generators:
             # todo input flag to force dataset generation
             # todo hash problem definition, if changed -> generate dataset again
@@ -199,11 +203,11 @@ def main():
     if not validate_testcases(validators, datasets):
         return USER_ERROR
 
-    if mechanism == 'judge' and judges:
-        for judge in judges:
-            judge.compile()
-
-    if mechanism == 'checker':
+    if mechanism == Mechanism.judge:
+        if judges:
+            for judge in judges:
+                judge.compile()
+    elif mechanism == Mechanism.checker:
         logger.info('Running the referential solution to get referential outputs')
         for ref in referential_solutions: ref.compile()
         for checker in checkers: checker.compile()
@@ -260,9 +264,9 @@ def main():
                     result = TIMELIMIT_EXCEEDED
                     solution.disqualified = True
                 if result == DEFAULT_FLAG:
-                    if mechanism == 'judge':
+                    if mechanism == Mechanism.judge:
                         result = judges[0].run([testcase.input, solution_testcase_out])
-                    elif mechanism == 'checker':
+                    elif mechanism == Mechanism.checker:
                         result = checkers[0].run([testcase.correct_output, solution_testcase_out])
                 if result == OK:
                     logger.verbose('OK')
@@ -287,7 +291,7 @@ def main():
                     print_file_contents(testcase.input)
                     logger.info('Output:')
                     print_file_contents(solution_testcase_out)
-                    if mechanism == 'checker':
+                    if mechanism == Mechanism.checker:
                         logger.info('Referential output:')
                         print_file_contents(testcase.correct_output)
     logger.info('Summary')
@@ -408,6 +412,11 @@ class BadTestResult:
             additional_str = 'TLE'
         return '[' + self.testcase.dataset.name + '/' + self.testcase.name + ' ' + additional_str + ']'
 
+class Mechanism(enum.Enum):
+   judge = 'judge'
+   checker = 'checker'
+   cross_check = 'cross_check'
+
 # == Configuration ===============================================================
 
 def setup_logging():
@@ -484,10 +493,21 @@ def compile_src(src_file, build_path):
         if res.returncode != 0:
             raise Exception('Unable to compile source code: ' + uv(src_file))
         logger.verbose('Compilation return code: ' + str(res.returncode))
-        save_content(hash_location, new_src_hash);
+        save_content(hash_location, new_src_hash)
         return exe_file
     raise Exception('Unknown source extension "' + extension + '" for file "' + src_file + '", and so algo does not know how to prepare it to be runnable.')
 
+def do_if_changed(src_file : str, changed_callback, not_changed_callback) -> bool:
+    base_src_name = bare_filename(src_file)
+    hash_location = join(build_path, base_src_name + '.hash')
+    new_src_hash = hash_file(src_file)
+    old_src_hash = retrieve_content(hash_location)
+    if new_src_hash == old_src_hash and exists(exe_file):
+        return not_changed_callback()
+    result = changed_callback()
+    save_content(hash_location, new_src_hash) # only save when successful
+    return result
+    
 def find_problem_folder(problem_id):
     logger.verbose('Problem id: ' + uv(problem_id))
     # search in working directory
@@ -555,9 +575,9 @@ def determine_checking_mechanism(judge, checker, referential_solutions):
                 # referential_code = solutions[0]
                 # referential_solutions = ''
                 # logger.info('Referential solution was chosen to be: ' + referential_solutions)
-        mechanism = 'checker'
+        mechanism = Mechanism.checker
     elif judge and len(judge) >= 1:
-        mechanism = 'judge'
+        mechanism = Mechanism.judge
     return mechanism
 
 def validate_testcases(validators, datasets):
