@@ -157,7 +157,7 @@ def main():
         logger.critical('This is an issue with the problem definition, contact the author.')
         logger.critical('To fix this: create either a "judge" or "checker and referential solution"')
         return PROBLEM_ERROR
-    logger.verbose('The checking mechanism is: ' + uv(mechanism))
+    logger.verbose('The checking mechanism is: ' + uv(mechanism.name))
 
     random.seed()
     global seed
@@ -240,7 +240,7 @@ def main():
                 os.makedirs(solution_out_dir, exist_ok=True)
                 solution_testcase_out = join(solution_out_dir, testcase.name + conf['out_ext'])
                 time_result_file = join(solution_out_dir, conf['statistics_file_name'])
-                result = Results.DEFAULT_FLAG.value
+                result = Result.DEFAULT_FLAG.value
                 try:
                     solution.timer.start()
                     return_code = solution.run([time_result_file], testcase.input, solution_testcase_out, conf['time_limit_seconds'])
@@ -249,30 +249,30 @@ def main():
                         logger.info('The program returned ' + uv(return_code) + ' (should return 0), and output >>>')
                         print_file_contents(solution_testcase_out)
                         logger.info('<<<')
-                        result = Results.RUNTIME_ERROR.value
+                        result = Result.RUNTIME_ERROR.value
                         solution.disqualified = True
                 except subprocess.TimeoutExpired as ex:
                     solution.timer.stop()
-                    result = Results.TIMELIMIT_EXCEEDED.value
+                    result = Result.TIMELIMIT_EXCEEDED.value
                     solution.disqualified = True
-                if result == Results.DEFAULT_FLAG.value:
+                if result == Result.DEFAULT_FLAG.value:
                     if mechanism == Mechanism.judge:
                         result = judges[0].run([testcase.input, solution_testcase_out])
                     elif mechanism == Mechanism.checker:
                         result = checkers[0].run([testcase.correct_output, solution_testcase_out])
                 print(result)
-                print(Results.OK.value)
-                if result == Results.OK.value:
+                print(Result.OK.value)
+                if result == Result.OK.value:
                     logger.verbose(solution.name + " OK")
-                elif result in [Results.WRONG_ANSWER.value, Results.PRESENTATION_ERROR.value, Results.RUNTIME_ERROR.value, Results.TIMELIMIT_EXCEEDED.value]:
-                    logger.error(result.long_string) # todo FIX the output message
-                elif result == Results.BAD_INVOCATION.value:
+                elif result in [Result.WRONG_ANSWER.value, Result.PRESENTATION_ERROR.value, Result.RUNTIME_ERROR.value, Result.TIMELIMIT_EXCEEDED.value]:
+                    logger.error(result) # todo FIX the output message
+                elif result == Result.BAD_INVOCATION.value:
                     logger.critical('The testing program returned a code for bad invocation. This means algo did not manage to run this program correctly. ' + uv(mechanism) + ' is probably writen incorrectly. If you think this is not the case, contact algo developers.')
                     return PROBLEM_ERROR
                 else:
-                    logger.error(uv(mechanism) + ' gave an invalid return code: ' + uv(result))
+                    logger.error(uv(mechanism.name) + ' gave an invalid return code: ' + str(result))
                     return PROBLEM_ERROR
-                if result != Results.OK.value:
+                if result != Result.OK.value:
                     # todo split results depending on retun code, and report correct error messages in summary
                     solution.bad_testcases.append(BadTestResult(testcase, result))
                     logger.info('Input:')
@@ -397,13 +397,13 @@ class BadTestResult:
         self.result_code = result_code
     def str(self):
         additional_str = ''
-        if self.result_code == Results.WRONG_ANSWER:
+        if self.result_code == Result.WRONG_ANSWER.value:
             additional_str = 'WA'
-        elif self.result_code == Results.PRESENTATION_ERROR:
+        elif self.result_code == Result.PRESENTATION_ERROR.value:
             additional_str = 'PE'
-        elif self.result_code == Results.RUNTIME_ERROR:
+        elif self.result_code == Result.RUNTIME_ERROR.value:
             additional_str = 'RTE'
-        elif self.result_code == Results.TIMELIMIT_EXCEEDED:
+        elif self.result_code == Result.TIMELIMIT_EXCEEDED.value:
             additional_str = 'TLE'
         return '[' + self.testcase.dataset.name + '/' + self.testcase.name + ' ' + additional_str + ']'
 
@@ -412,20 +412,18 @@ class Mechanism(enum.Enum):
     checker = 'checker'
     cross_check = 'cross_check'
 
-class Result:
+class Result(enum.Enum):
+    OK = (0, 'OK', 'OK')
+    WRONG_ANSWER = (1, 'WRONG ANSWER', 'WA')
+    PRESENTATION_ERROR = (2, 'PRESENTATION ERROR', 'PE')
+    TIMELIMIT_EXCEEDED = (3, 'TIMELIMIT EXCEEDED', 'TLE')
+    RUNTIME_ERROR = (4, 'RUNTIME ERROR', 'RE')
+    BAD_INVOCATION = (43, 'BAD INVOCATION', 'BAD')
+    DEFAULT_FLAG = (88, 'DEFAULT', 'DEF')
     def __init__(self, value : int, long_string : str, short_string : str):
         self.value = value
         self.short_string = short_string
         self.long_string = long_string
-
-class Results(enum.Enum):
-    OK = Result(0, 'OK', 'OK')
-    WRONG_ANSWER = Result(1, 'WRONG ANSWER', 'WA')
-    PRESENTATION_ERROR = Result(2, 'PRESENTATION ERROR', 'PE')
-    TIMELIMIT_EXCEEDED = Result(3, 'TIMELIMIT EXCEEDED', 'TLE')
-    RUNTIME_ERROR = Result(4, 'RUNTIME ERROR', 'RE')
-    BAD_INVOCATION = Result(43, 'BAD INVOCATION', 'BAD')
-    DEFAULT_FLAG = Result(88, 'DEFAULT', 'DEF')
 
 # == Configuration ===============================================================
 
