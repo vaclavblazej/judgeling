@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
 # if possible, keep the program in single file with at most 1000 lines
 
+# This script provides a testing interface for solutions to problems which are defined in standard format.
+
+# It is not designed to -- search for user's solutions, create problem defintion scaffolding, todo ...
+
+# === TODOS ===
 # get datasets from folder names in .tmp/data/
 # fix - when changing generator to have less testcases, old ones are not removed
 # add precise time measurements
 # add java
 # allow cross checking of user's solutions
 # enable generator to supply inputs without saving them
-# option to define dataset size ?
 # simplification of testcases to find small bad testcase - 'min' program
-# add command to generate problem definition scaffolding ?
+# ? option to define dataset size ?
 
 import os, sys, argparse, logging, glob, subprocess, random, re, hashlib, json, shutil, itertools, enum
 import resource # unix specific, for measuring time, see https://stackoverflow.com/questions/16701310/get-how-much-time-python-subprocess-spends/16701365
@@ -28,12 +32,15 @@ class ArgumentParser(argparse.ArgumentParser): # bad argument exit code override
         self.print_usage(sys.stderr)
         self.exit(INVALID_ARGUMENT, '%s: error: %s\n' % (self.prog, message))
 
-parser = ArgumentParser(description='Test algorithm implementations on problem definitions')
+parser = ArgumentParser(
+        description='Test algorithm implementations on problem definitions',
+        epilog='Confront documentation of this script for examples and usage of various concepts.'
+        )
+parser.add_argument('--version', dest='version', action='store_true', help='prints out version information')
 parser.add_argument('-P', '--problem', dest='problem_id', help='problem definition to be run')
 parser.add_argument('-S', '--solution', dest='solution', nargs='+', help='user\'s files with his own solutions to the problem')
 parser.add_argument('-D', '--dataset', dest='dataset_regex', help='filter used datasets using regex')
 parser.add_argument('-T', '--testcase', dest='testcase_regex', help='filter used testcases using regex')
-# parser.add_argument('-s', '--scan', dest='scan', action='store_true', help='scan current folder for files solving the problem')
 parser.add_argument('--seed', dest='seed', help='provide a rng seed for dataset generators')
 parser.add_argument('--draw', dest='draw', action='store_true', help='creates drawings of testcases using pic program')
 parser.add_argument('--input', dest='input', nargs='+', help='supplies input data files manually')
@@ -41,7 +48,6 @@ parser.add_argument('-g', '--force-gen', dest='force_generation', action='store_
 parser.add_argument('-q', '--quiet', dest='logging_level', const=QUIET_LEVEL, action='store_const', help='no output will be shown')
 parser.add_argument('-v', '--verbose', dest='logging_level', const=VERBOSE_LEVEL, action='store_const', help='more detailed info about testing shown')
 parser.add_argument('-d', '--debug', dest='logging_level', const=logging.DEBUG, action='store_const', help='very detailed messages of script\'s inner workings')
-parser.add_argument('--version', dest='version', action='store_true', help='prints out version information')
 
 conf = { 'logging_level': logging.INFO, }
 script_path = dirname(realpath(__file__))
@@ -104,16 +110,6 @@ def main():
                 logger.error('Supplied solution file does not exist: ' + uv(solution_path))
                 return USER_ERROR
 
-    # if args.scan:
-        # logger.info('Searching for solutions; the ' + problem_id + ' is solved in:')
-        # problem_flag = 'solves ' + problem_id
-        # found = []
-        # for cpp_file_path in glob.glob('*' + conf['ext'], recursive=True):
-            # with open(cpp_file_path) as cpp_file:
-                # if problem_flag in cpp_file.read():
-                    # found.append(cpp_file_path)
-        # logger.info('Scan for ' + problem_flag + ' found ' + str(len(found)) + ' solutions')
-        # solutions.extend([Solution(f) for f in found])
     if len(solutions) == 0:
         if exists(problem_def_path):
             logger.verbose('Problem information contained in: ' + problem_def_path)
