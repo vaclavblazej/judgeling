@@ -8,10 +8,7 @@
 # allow cross checking of user's solutions
 # enable generator to supply inputs without saving them
 # option to define dataset size ?
-# repositories with problems ?
-# static dataset ?
-# simplification of testcases to find small bad testcase - 'cut' or 'min' program
-# scan for solutions ?
+# simplification of testcases to find small bad testcase - 'min' program
 # add command to generate problem definition scaffolding ?
 
 import os, sys, argparse, logging, glob, subprocess, random, re, hashlib, json, shutil, itertools, enum
@@ -23,7 +20,6 @@ USER_ERROR = 1 # argument format is fine, but content is wrong
 PROBLEM_ERROR = 2 # content of problem definition is wrong
 INVALID_ARGUMENT = 129 # argument format is wrong
 
-
 VERBOSE_LEVEL = 15
 QUIET_LEVEL = 60
 
@@ -32,7 +28,7 @@ class ArgumentParser(argparse.ArgumentParser): # bad argument exit code override
         self.print_usage(sys.stderr)
         self.exit(INVALID_ARGUMENT, '%s: error: %s\n' % (self.prog, message))
 
-parser = ArgumentParser(description='Test algorithm implementations against problem definitions')
+parser = ArgumentParser(description='Test algorithm implementations on problem definitions')
 parser.add_argument('-P', '--problem', dest='problem_id', help='problem definition to be run')
 parser.add_argument('-S', '--solution', dest='solution', nargs='+', help='user\'s files with his own solutions to the problem')
 parser.add_argument('-D', '--dataset', dest='dataset_regex', help='filter used datasets using regex')
@@ -53,7 +49,7 @@ working_directory = os.getcwd()
 global_config_folder = join(script_path, 'config.json')
 local_config_folder = join(script_path, 'config_local.json')
 problem_search_location = realpath(join(script_path, '..', 'acm-problems/problems'))
-version = '0.1.3'
+version = '0.1.4'
 
 # == Main Logic ==================================================================
 
@@ -68,6 +64,10 @@ def main():
     logger.debug('Script folder: ' + uv(script_path))
     logger.debug('Working directory: ' + uv(working_directory))
     logger.debug('Arguments: ' + str(sys.argv))
+
+    if len(sys.argv) == 1:
+        parser.print_help(sys.stderr)
+        return SUCCESSFULL_EXECUTION
 
     if args.version:
         print('algo version ' + version)
@@ -204,8 +204,9 @@ def main():
         for ref in referential_solutions: ref.compile()
         for checker in checkers: checker.compile()
         for dataset in datasets:
+            logger.info('Dataset ' + dataset.name)
             for testcase in dataset.testcases:
-                logger.info('running reference ' + testcase.input)
+                logger.info('Testcase: ' + uv(testcase.name))
                 referential_solutions[0].run([], testcase.input, testcase.correct_output)
         solutions.extend(referential_solutions)
         logger.info('Referential outputs obtained succesfully')
@@ -240,7 +241,7 @@ def main():
                 os.makedirs(solution_out_dir, exist_ok=True)
                 solution_testcase_out = join(solution_out_dir, testcase.name + conf['out_ext'])
                 time_result_file = join(solution_out_dir, conf['statistics_file_name'])
-                result = Result.DEFAULT_FLAG.value
+                result = Result.DEFAULT_FLAG
                 try:
                     solution.timer.start()
                     return_code = solution.run([time_result_file], testcase.input, solution_testcase_out, conf['time_limit_seconds'])
@@ -249,30 +250,29 @@ def main():
                         logger.info('The program returned ' + uv(return_code) + ' (should return 0), and output >>>')
                         print_file_contents(solution_testcase_out)
                         logger.info('<<<')
-                        result = Result.RUNTIME_ERROR.value
+                        result = Result.RUNTIME_ERROR
                         solution.disqualified = True
                 except subprocess.TimeoutExpired as ex:
                     solution.timer.stop()
-                    result = Result.TIMELIMIT_EXCEEDED.value
+                    result = Result.TIMELIMIT_EXCEEDED
                     solution.disqualified = True
-                if result == Result.DEFAULT_FLAG.value:
+                if result == Result.DEFAULT_FLAG:
                     if mechanism == Mechanism.judge:
-                        result = judges[0].run([testcase.input, solution_testcase_out])
+                        result_num = judges[0].run([testcase.input, solution_testcase_out])
                     elif mechanism == Mechanism.checker:
-                        result = checkers[0].run([testcase.correct_output, solution_testcase_out])
-                print(result)
-                print(Result.OK.value)
-                if result == Result.OK.value:
+                        result_num = checkers[0].run([testcase.correct_output, solution_testcase_out])
+                    result = Result.from_num(result_num)
+                if result == Result.OK:
                     logger.verbose(solution.name + " OK")
-                elif result in [Result.WRONG_ANSWER.value, Result.PRESENTATION_ERROR.value, Result.RUNTIME_ERROR.value, Result.TIMELIMIT_EXCEEDED.value]:
-                    logger.error(result) # todo FIX the output message
-                elif result == Result.BAD_INVOCATION.value:
+                elif result in [Result.WRONG_ANSWER, Result.PRESENTATION_ERROR, Result.RUNTIME_ERROR, Result.TIMELIMIT_EXCEEDED]:
+                    logger.error(solution.name + " " + result.short_string)
+                elif result == Result.BAD_INVOCATION:
                     logger.critical('The testing program returned a code for bad invocation. This means algo did not manage to run this program correctly. ' + uv(mechanism) + ' is probably writen incorrectly. If you think this is not the case, contact algo developers.')
                     return PROBLEM_ERROR
                 else:
                     logger.error(uv(mechanism.name) + ' gave an invalid return code: ' + str(result))
                     return PROBLEM_ERROR
-                if result != Result.OK.value:
+                if result != Result.OK:
                     # todo split results depending on retun code, and report correct error messages in summary
                     solution.bad_testcases.append(BadTestResult(testcase, result))
                     logger.info('Input:')
@@ -392,20 +392,11 @@ class Timer:
         return resource.getrusage(resource.RUSAGE_CHILDREN)
 
 class BadTestResult:
-    def __init__(self, testcase, result_code):
+    def __init__(self, testcase, result):
         self.testcase = testcase
-        self.result_code = result_code
+        self.result = result
     def str(self):
-        additional_str = ''
-        if self.result_code == Result.WRONG_ANSWER.value:
-            additional_str = 'WA'
-        elif self.result_code == Result.PRESENTATION_ERROR.value:
-            additional_str = 'PE'
-        elif self.result_code == Result.RUNTIME_ERROR.value:
-            additional_str = 'RTE'
-        elif self.result_code == Result.TIMELIMIT_EXCEEDED.value:
-            additional_str = 'TLE'
-        return '[' + self.testcase.dataset.name + '/' + self.testcase.name + ' ' + additional_str + ']'
+        return '[' + self.testcase.dataset.name + '/' + self.testcase.name + ' ' + result.short_string + ']'
 
 class Mechanism(enum.Enum):
     judge = 'judge'
@@ -420,10 +411,17 @@ class Result(enum.Enum):
     RUNTIME_ERROR = (4, 'RUNTIME ERROR', 'RE')
     BAD_INVOCATION = (43, 'BAD INVOCATION', 'BAD')
     DEFAULT_FLAG = (88, 'DEFAULT', 'DEF')
-    def __init__(self, value : int, long_string : str, short_string : str):
-        self.value = value
+
+    def __init__(self, num : int, long_string : str, short_string : str):
+        self.num = num
         self.short_string = short_string
         self.long_string = long_string
+    @staticmethod
+    def from_num(num : int):
+        for result in Result:
+            if num == result.num:
+                return result
+        return None
 
 # == Configuration ===============================================================
 
