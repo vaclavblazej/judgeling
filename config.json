@@ -7,6 +7,7 @@
     "extensions": [".cpp", ".py", ".sh"],
     "in_ext": ".in",
     "out_ext": ".out",
+    "enable_cache": true,
     "logging_level": 20,
     "time_limit_seconds": 30
 }

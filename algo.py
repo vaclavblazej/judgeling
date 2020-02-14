@@ -1,17 +1,21 @@
 #!/usr/bin/env python3
-# if possible, keep the program in single file with at most 1000 lines
+# Keep the program in a single file with at most 1000 lines, if possible.
 
 # This script provides a testing interface for solutions to problems which are defined in standard format.
 
-# It is not designed to -- search for user's solutions, create problem defintion scaffolding, todo ...
+# It is NOT designed to
+# * search for user's solutions
+# * create problem defintion scaffolding
+# * todo ...
 
 # === TODOS ===
-# get datasets from folder names in .tmp/data/
 # add precise time measurements
-# add java
-# enable generator to supply inputs without saving them
+# add java compilation and running
+# add generator parameters to enable:
+# * supplying inputs online
+# * ? option to define dataset size ?
 # simplification of testcases to find small bad testcase - 'min' program
-# ? option to define dataset size ?
+# more comprehensive convering with tests
 
 import os, sys, argparse, logging, glob, subprocess, random, re, hashlib, json, shutil, itertools, enum
 import resource # unix specific, for measuring time, see https://stackoverflow.com/questions/16701310/get-how-much-time-python-subprocess-spends/16701365
@@ -35,7 +39,7 @@ parser = ArgumentParser(
         epilog='Confront documentation of this script for examples and usage of various concepts.'
         )
 parser.add_argument('--version', dest='version', action='store_true', help='prints out version information')
-parser.add_argument('-P', '--problem', dest='problem_id', help='problem definition to be run')
+parser.add_argument('-P', '--problem', dest='problem_query', help='problem definition to be run')
 parser.add_argument('-S', '--solution', dest='solution', nargs='+', help='user\'s files with his own solutions to the problem')
 parser.add_argument('-D', '--dataset', dest='dataset_regex', help='filter used datasets using regex')
 parser.add_argument('-T', '--testcase', dest='testcase_regex', help='filter used testcases using regex')
@@ -47,7 +51,7 @@ parser.add_argument('-q', '--quiet', dest='logging_level', const=QUIET_LEVEL, ac
 parser.add_argument('-v', '--verbose', dest='logging_level', const=VERBOSE_LEVEL, action='store_const', help='more detailed info about testing shown')
 parser.add_argument('-d', '--debug', dest='logging_level', const=logging.DEBUG, action='store_const', help='very detailed messages of script\'s inner workings')
 
-conf = { 'logging_level': logging.INFO, }
+conf = { 'logging_level': logging.INFO, } # logging is set up before config loads
 script_path = dirname(realpath(__file__))
 working_directory = os.getcwd()
 global_config_folder = join(script_path, 'config.json')
@@ -77,15 +81,14 @@ def main():
         print('algo version ' + version)
         return SUCCESSFULL_EXECUTION
 
-    # fix problem_id for cases when it is defined in argument by local path
-    problem_id = args.problem_id
-    if problem_id is None:
-        logger.error('Problem ID was not supplied! Add -P <problem_id> argument.')
+    problem_query = args.problem_query
+    if problem_query is None:
+        logger.error('Problem ID was not supplied! Add -P <problem location/id> argument.')
         return SUCCESSFULL_EXECUTION
 
-    problem_folder = find_problem_folder(problem_id)
+    problem_folder = find_problem_folder(problem_query)
     if not problem_folder:
-        logger.error('Unable to locate the problem definition file for ' + uv(problem_id))
+        logger.error('Unable to locate the problem definition file for ' + uv(problem_query))
         return USER_ERROR
     problem_def_path = join(problem_folder, conf['def_file'])
     if not exists(problem_def_path):
@@ -378,6 +381,8 @@ class HashFile:
         self.new_src_hash = hash_file(src_file_location)
         self.old_src_hash = retrieve_content(self.hash_location)
     def changed(self) -> bool:
+        if not conf['enable_cache']:
+            return True
         return self.new_src_hash != self.old_src_hash
     def save(self):
         save_content(self.hash_location, self.new_src_hash)
@@ -485,13 +490,13 @@ def get_file_or_folder(problem_folder, base_name, class_name=Program):
 def compile_src(src_file, build_path):
     extension = file_extension(src_file)
     # interpreted languages can be run directly
-    if extension == 'py' or extension == 'sh':
+    if extension in ['py', 'sh']:
         return src_file
     base_src_name = bare_filename(src_file)
     exe_file = join(build_path, base_src_name + '.exe')
     compilation = []
     # cpp-specific compilation
-    if extension == 'cpp' or extension == 'C' or extension == 'c':
+    if extension in ['cpp', 'C', 'c']:
         compilation = ['g++'] + conf['cflags'] + ['-o', exe_file, src_file]
     # if extension == 'java'
         # compilation = subprocess.run(['javac'] + ['-o', exe_file, src_file])
@@ -511,15 +516,15 @@ def compile_src(src_file, build_path):
         return exe_file
     raise Exception('Unknown source extension ' + uv(extension) + ' for file ' + uv(src_file) + ', and so algo does not know how to prepare it to be runnable.')
 
-def find_problem_folder(problem_id):
-    logger.verbose('Problem id: ' + uv(problem_id))
+def find_problem_folder(problem_query):
+    logger.verbose('Problem id: ' + uv(problem_query))
     # search in working directory
-    location_path = realpath(join(working_directory, problem_id))
+    location_path = realpath(join(working_directory, problem_query))
     if exists(location_path):
         logger.debug('Problem found locally in ' + uv(location_path))
         return location_path
     # search in default problem repository location
-    repository_path_regex = join(problem_search_location, '**', problem_id, conf['def_file'])
+    repository_path_regex = join(problem_search_location, '**', problem_query, conf['def_file'])
     logger.debug('Repository path regex: ' + uv(repository_path_regex))
     for def_file in glob.glob(repository_path_regex, recursive=True):
         # todo if found more than one problem definition, raise a warning
