@@ -7,7 +7,6 @@
 
 # === TODOS ===
 # get datasets from folder names in .tmp/data/
-# fix - when changing generator to have less testcases, old ones are not removed
 # add precise time measurements
 # add java
 # allow cross checking of user's solutions
@@ -55,7 +54,7 @@ working_directory = os.getcwd()
 global_config_folder = join(script_path, 'config.json')
 local_config_folder = join(script_path, 'config_local.json')
 problem_search_location = realpath(join(script_path, '..', 'acm-problems/problems'))
-version = '0.1.4'
+version = '0.1.5'
 
 # == Main Logic ==================================================================
 
@@ -196,7 +195,7 @@ def main():
             for judge in judges:
                 judge.compile()
     elif mechanism == Mechanism.checker:
-        logger.info('Running the referential solution to get referential outputs')
+        logger.info('Running referential solution to get referential outputs')
         for ref in referential_solutions: ref.compile()
         for checker in checkers: checker.compile()
         for dataset in datasets:
@@ -341,6 +340,11 @@ class Generator(Program):
         if not args.force_generation and new_src_hash == old_src_hash:
             logger.verbose('Skipped generation of ' + uv(self.name) + ' due to non-changed source file.')
             return 0
+        logger.verbose('Removing old testcases of ' + uv(self.name))
+        for filename in os.listdir(self.data_folder):
+            file_location=join(self.data_folder, filename)
+            if len(filename)>3 and filename.endswith(conf['out_ext']):
+                os.remove(file_location)
         save_content(hash_location, new_src_hash)
         run_return_code = self.run([str(seed), self.data_folder])
         return run_return_code
