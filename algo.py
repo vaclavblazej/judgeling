@@ -9,7 +9,6 @@
 # get datasets from folder names in .tmp/data/
 # add precise time measurements
 # add java
-# allow cross checking of user's solutions
 # enable generator to supply inputs without saving them
 # simplification of testcases to find small bad testcase - 'min' program
 # ? option to define dataset size ?
@@ -146,7 +145,7 @@ def main():
     if referential_solutions: logger.verbose('Referential solutions: ' + str(len(referential_solutions)))
     if checkers: logger.verbose('Checkers: ' + str(len(checkers)))
 
-    mechanism = determine_checking_mechanism(judges, checkers, referential_solutions)
+    mechanism = determine_checking_mechanism(judges, checkers, referential_solutions, solutions)
     if not mechanism:
         logger.critical('There is no checking mechanism!')
         logger.critical('This is an issue with the problem definition, contact the author.')
@@ -194,7 +193,11 @@ def main():
         if judges:
             for judge in judges:
                 judge.compile()
-    elif mechanism == Mechanism.checker:
+    elif mechanism in [Mechanism.checker, Mechanism.cross_check]:
+        if mechanism == Mechanism.cross_check:
+            referential_solutions = solutions[:1]
+            solutions = solutions[1:]
+            logger.info('Picked solution ' + uv(referential_solutions[0].name) + ' as a referential solution')
         logger.info('Running referential solution to get referential outputs')
         for ref in referential_solutions: ref.compile()
         for checker in checkers: checker.compile()
@@ -254,7 +257,7 @@ def main():
                 if result == Result.DEFAULT_FLAG:
                     if mechanism == Mechanism.judge:
                         result_num = judges[0].run([testcase.input, solution_testcase_out])
-                    elif mechanism == Mechanism.checker:
+                    elif mechanism in [Mechanism.checker,Mechanism.cross_check]:
                         result_num = checkers[0].run([testcase.correct_output, solution_testcase_out])
                     result = Result.from_num(result_num)
                 if result == Result.OK:
@@ -274,7 +277,7 @@ def main():
                     print_file_contents(testcase.input)
                     logger.info('Output:')
                     print_file_contents(solution_testcase_out)
-                    if mechanism == Mechanism.checker:
+                    if mechanism in [Mechanism.checker, Mechanism.cross_check]:
                         logger.info('Referential output:')
                         print_file_contents(testcase.correct_output)
     logger.info('Summary')
@@ -295,7 +298,7 @@ def uv(to_print):
 # == Structure ===================================================================
 
 class Program:
-    def __init__(self, source_file):
+    def __init__(self, source_file:str):
         self.source_file = source_file
         self.name = bare_filename(source_file)
     def compile(self):
@@ -320,7 +323,7 @@ class Program:
         return p.returncode
 
 class Solution(Program):
-    def __init__(self, solution_file):
+    def __init__(self, solution_file:str):
         super().__init__(solution_file)
         self.bad_testcases = []
         self.timer = Timer()
@@ -347,7 +350,7 @@ class Generator(Program):
         return run_return_code
 
 class Testcase:
-    def __init__(self, testcase_input_file, dataset):
+    def __init__(self, testcase_input_file:str, dataset:str):
         self.input = testcase_input_file
         self.dataset = dataset
         self.name = bare_filename(self.input)
@@ -356,7 +359,7 @@ class Testcase:
         self.valid = True
 
 class Dataset:
-    def __init__(self, dataset_folder):
+    def __init__(self, dataset_folder:str):
         self.name = basename(dataset_folder)
         self.data_folder = join(data_path, self.name)
         self.testcases = None
@@ -406,9 +409,9 @@ class BadTestResult:
         return '[' + self.testcase.dataset.name + '/' + self.testcase.name + ' ' + result.short_string + ']'
 
 class Mechanism(enum.Enum):
-    judge = 'judge'
-    checker = 'checker'
-    cross_check = 'cross_check'
+    judge = 'judge' # it can decide whether the output is correct or not
+    checker = 'checker' # have referential solution and the output will be compared
+    cross_check = 'cross_check' # more user's solutions run against each other
 
 class Result(enum.Enum):
     OK = (0, 'OK', 'OK')
@@ -564,21 +567,15 @@ def hash_file(file_location):
 
 # == Core Script Logic Chunks ====================================================
 
-def determine_checking_mechanism(judge, checker, referential_solutions):
-    mechanism = None
-    if checker and len(checker) >= 1 and referential_solutions and len(referential_solutions) >= 1:
-        # if referential_solutions is None:
-            # if len(solutions) == 1:
-                # logger.warning('This problem has checker but no referential solution.')
-            # else:
-                # # todo if problem has no default solution, pick one of the supplied solutions
-                # referential_code = solutions[0]
-                # referential_solutions = ''
-                # logger.info('Referential solution was chosen to be: ' + referential_solutions)
-        mechanism = Mechanism.checker
-    elif judge and len(judge) >= 1:
-        mechanism = Mechanism.judge
-    return mechanism
+def determine_checking_mechanism(judge, checker, referential_solutions, solutions):
+    if checker and len(checker) >= 1:
+        if referential_solutions and len(referential_solutions) >= 1:
+            return Mechanism.checker
+        if solutions and len(solutions) >= 2:
+            return Mechanism.cross_check
+    if judge and len(judge) >= 1:
+        return Mechanism.judge
+    return None
 
 def validate_testcases(validators, datasets):
     if validators:
