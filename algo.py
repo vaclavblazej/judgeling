@@ -281,8 +281,7 @@ def main():
     for solution in solutions:
         res_string = ''
         if len(solution.bad_testcases) != 0:
-            err_str = ' '.join([x.str() for x in solution.bad_testcases])
-            res_string = 'Errors in ' + err_str
+            res_string = 'Errors in ' + (' '.join([x.str() for x in solution.bad_testcases]))
         else:
             res_string = 'OK'
         logger.info(solution.name + ' (time ' + str(round(solution.timer.get_total(), 3)) + 's, max ' + str(round(solution.timer.get_max(), 3)) + 's): ' + res_string)
@@ -334,10 +333,8 @@ class Generator(Program):
     def generate(self):
         os.makedirs(self.data_folder, exist_ok = True)
         self.compile()
-        hash_location = join(self.data_folder, self.name + '.hash')
-        new_src_hash = hash_file(self.source_file)
-        old_src_hash = retrieve_content(hash_location)
-        if not args.force_generation and new_src_hash == old_src_hash:
+        hash_src = HashFile(self.data_folder, self.source_file)
+        if not args.force_generation and not hash_src.changed():
             logger.verbose('Skipped generation of ' + uv(self.name) + ' due to non-changed source file.')
             return 0
         logger.verbose('Removing old testcases of ' + uv(self.name))
@@ -345,7 +342,7 @@ class Generator(Program):
             file_location=join(self.data_folder, filename)
             if len(filename)>3 and filename.endswith(conf['out_ext']):
                 os.remove(file_location)
-        save_content(hash_location, new_src_hash)
+        hash_src.save()
         run_return_code = self.run([str(seed), self.data_folder])
         return run_return_code
 
@@ -371,6 +368,16 @@ class Dataset:
         globbed_testcases.sort()
         self.testcases = [Testcase(x, self) for x in globbed_testcases]
         logger.verbose('Found ' + str(len(self.testcases)) + ' testcases.')
+
+class HashFile:
+    def __init__(self, hash_dir:str, src_file_location:str):
+        self.hash_location = join(hash_dir, bare_filename(src_file_location) + '.hash')
+        self.new_src_hash = hash_file(src_file_location)
+        self.old_src_hash = retrieve_content(self.hash_location)
+    def changed(self) -> bool:
+        return self.new_src_hash != self.old_src_hash
+    def save(self):
+        save_content(self.hash_location, self.new_src_hash)
 
 class Timer:
     def __init__(self):
@@ -412,12 +419,12 @@ class Result(enum.Enum):
     BAD_INVOCATION = (43, 'BAD INVOCATION', 'BAD')
     DEFAULT_FLAG = (88, 'DEFAULT', 'DEF')
 
-    def __init__(self, num : int, long_string : str, short_string : str):
+    def __init__(self, num:int, long_string:str, short_string:str):
         self.num = num
         self.short_string = short_string
         self.long_string = long_string
     @staticmethod
-    def from_num(num : int):
+    def from_num(num:int):
         for result in Result:
             if num == result.num:
                 return result
@@ -487,10 +494,8 @@ def compile_src(src_file, build_path):
         # compilation = subprocess.run(['javac'] + ['-o', exe_file, src_file])
     if len(compilation):
         os.makedirs(build_path, exist_ok=True)
-        hash_location = join(build_path, base_src_name + '.hash')
-        new_src_hash = hash_file(src_file)
-        old_src_hash = retrieve_content(hash_location)
-        if new_src_hash == old_src_hash and exists(exe_file):
+        hash_src = HashFile(build_path, src_file)
+        if not hash_src.changed() and exists(exe_file):
             logger.verbose('Skipped compilation of ' + uv(basename(src_file)) + ' due to non-changed source file.')
             return exe_file
         logger.info('Compiling: ' + uv(basename(src_file)))
@@ -499,22 +504,10 @@ def compile_src(src_file, build_path):
         if res.returncode != 0:
             raise Exception('Unable to compile source code: ' + uv(src_file))
         logger.verbose('Compilation return code: ' + str(res.returncode))
-        save_content(hash_location, new_src_hash)
+        hash_src.save()
         return exe_file
     raise Exception('Unknown source extension ' + uv(extension) + ' for file ' + uv(src_file) + ', and so algo does not know how to prepare it to be runnable.')
 
-def do_if_changed(src_file : str, changed_callback, not_changed_callback) -> bool:
-    base_src_name = bare_filename(src_file)
-    hash_location = join(build_path, base_src_name + '.hash')
-    new_src_hash = hash_file(src_file)
-    old_src_hash = retrieve_content(hash_location)
-    # how the hell can we include the "exists" condition in this generalized function?
-    if new_src_hash == old_src_hash and exists(exe_file):
-        return not_changed_callback()
-    result = changed_callback()
-    save_content(hash_location, new_src_hash) # only save when successful
-    return result
-    
 def find_problem_folder(problem_id):
     logger.verbose('Problem id: ' + uv(problem_id))
     # search in working directory
