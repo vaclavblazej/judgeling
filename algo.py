@@ -490,16 +490,17 @@ def get_file_or_folder(problem_folder, base_name, class_name=Program):
 def compile_src(src_file, build_path):
     extension = file_extension(src_file)
     # interpreted languages can be run directly
-    if extension in ['py', 'sh']:
+    if extension in conf['languages']['interpreted']:
         return src_file
     base_src_name = bare_filename(src_file)
     exe_file = join(build_path, base_src_name + '.exe')
     compilation = []
-    # cpp-specific compilation
+    # for language in conf['compiled']:
+        # if extension in language['extensions']:
+            # compilation = [language['command']]
+            # TODO
     if extension in ['cpp', 'C', 'c']:
         compilation = ['g++'] + conf['cflags'] + ['-o', exe_file, src_file]
-    # if extension == 'java'
-        # compilation = subprocess.run(['javac'] + ['-o', exe_file, src_file])
     if len(compilation):
         os.makedirs(build_path, exist_ok=True)
         hash_src = HashFile(build_path, src_file)

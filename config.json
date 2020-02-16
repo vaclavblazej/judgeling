@@ -9,5 +9,17 @@
     "out_ext": ".out",
     "enable_cache": true,
     "logging_level": 20,
+    "languages": {
+        "interpreted": ["py", "sh"],
+        "compiled": [
+            {
+                "extensions": ["c", "cpp", "C"],
+                "command": "g++ -O2 -g -std=c++17 -lm -pedantic -D{flag} -o {exe} {source}"
+            }, {
+                "extensions": ["java"],
+                "command": "javac {source}"
+            }
+        ]
+    },
     "time_limit_seconds": 30
 }
