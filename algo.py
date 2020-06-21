@@ -3,20 +3,6 @@
 
 # This script provides a testing interface for solutions to problems which are defined in standard format.
 
-# It is NOT designed to
-# * search for user's solutions
-# * create problem defintion scaffolding
-# * todo ...
-
-# === TODOS ===
-# add precise time measurements
-# add java compilation and running
-# add generator parameters to enable:
-# * supplying inputs online
-# * ? option to define dataset size ?
-# simplification of testcases to find small bad testcase - 'min' program
-# more comprehensive convering with tests
-
 import argparse
 import enum
 import glob
@@ -398,10 +384,12 @@ class HashFile:
         self.hash_location = join(hash_dir, bare_filename(src_file_location) + '.hash')
         self.new_src_hash = hash_file(src_file_location)
         self.old_src_hash = retrieve_content(self.hash_location)
+
     def changed(self) -> bool:
         if not conf['enable_cache']:
             return True
         return self.new_src_hash != self.old_src_hash
+
     def save(self):
         save_content(self.hash_location, self.new_src_hash)
 
@@ -409,18 +397,24 @@ class Timer:
     def __init__(self):
         self.total = 0.0
         self.max = 0.0
+        self.start_time
+
     def start(self):
         run_info = self.get_info()
         self.start_time = run_info.ru_utime + run_info.ru_stime
+
     def stop(self):
         run_info = self.get_info()
         self.end_time = run_info.ru_utime + run_info.ru_stime
         self.total += self.end_time - self.start_time
         self.max = max(self.max, self.end_time - self.start_time)
+
     def get_total(self):
         return self.total
+
     def get_max(self):
         return self.max
+
     def get_info(self):
         return resource.getrusage(resource.RUSAGE_CHILDREN)
 
@@ -428,6 +422,7 @@ class BadTestResult:
     def __init__(self, testcase, result):
         self.testcase = testcase
         self.result = result
+
     def str(self):
         return '[' + self.testcase.dataset.name + '/' + self.testcase.name + ' ' + self.result.short_string + ']'
 
@@ -449,6 +444,7 @@ class Result(enum.Enum):
         self.num = num
         self.short_string = short_string
         self.long_string = long_string
+
     @staticmethod
     def from_num(num:int):
         for result in Result:
@@ -466,15 +462,14 @@ def setup_logging():
     logging.Logger.verbose = verbose
     global logger
     logger = logging.getLogger()
-    ch = logging.StreamHandler()
+    handler = logging.StreamHandler()
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-    ch.setFormatter(formatter)
-    logger.addHandler(ch)
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
 
 def configure():
     conf.update(load_configuration(global_config_folder))
     conf.update(load_configuration(local_config_folder))
-    return 
 
 def load_configuration(config_file_location):
     try:
@@ -555,37 +550,39 @@ def print_file_contents(file_name, number_of_lines=20):
     if conf['logging_level'] >= QUIET_LEVEL:
         return
     with open(file_name, 'r') as lines:
-        c = 1
+        count = 1
         for line in lines:
             if len(line[121:122]) == 0:
                 print_line = line
             else:
                 print_line = line[:100] + '...<more characters>\n'
-            c += 1
+            count += 1
             print(print_line, end='')
-            if c >= number_of_lines:
+            if count >= number_of_lines:
                 print('...<more lines>')
                 break
 
 def retrieve_content(file_location):
     try:
-        with open(file_location, 'r') as f:
-            data = f.read()
+        with open(file_location, 'r') as content_file:
+            data = content_file.read()
             return data
-    except FileNotFoundError: pass
+    except FileNotFoundError:
+        pass
     return None
 
 def save_content(file_location, content):
-    with open(file_location, 'w+') as f:
-        f.write(content)
+    with open(file_location, 'w+') as content_file:
+        content_file.write(content)
 
 def hash_file(file_location):
-    BUF_SIZE = pow(2,16) # reads data in 64kb chunks
+    BUF_SIZE = pow(2, 16) # reads data in 64kb chunks
     sha1 = hashlib.sha1()
-    with open(file_location, 'rb') as f:
+    with open(file_location, 'rb') as content_file:
         while True:
-            data = f.read(BUF_SIZE)
-            if not data: break
+            data = content_file.read(BUF_SIZE)
+            if not data:
+                break
             sha1.update(data)
     logger.debug('Hashed ' + uv(file_location) + ' into ' + uv(sha1.hexdigest()))
     return sha1.hexdigest()
