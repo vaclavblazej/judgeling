@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Keep the program in a single file with at most 1000 lines, if possible.
+# Keep this program in a single file with at most 1000 lines for the sake of simplicity.
 
 # This script provides a testing interface for solutions to problems which are defined in standard format.
 
@@ -17,9 +17,24 @@
 # simplification of testcases to find small bad testcase - 'min' program
 # more comprehensive convering with tests
 
-import os, sys, argparse, logging, glob, subprocess, random, re, hashlib, json, shutil, itertools, enum
-import resource # unix specific, for measuring time, see https://stackoverflow.com/questions/16701310/get-how-much-time-python-subprocess-spends/16701365
-from os.path import * # frequent functions: join, exists, dirname, realpath, etc.
+import argparse
+import enum
+import glob
+import hashlib
+import itertools
+import json
+import logging
+import os
+import random
+import re
+import shutil
+import subprocess
+import sys
+
+# unix specific, for measuring time, see https://stackoverflow.com/questions/16701310/get-how-much-time-python-subprocess-spends/16701365
+import resource
+
+from os.path import join, dirname, realpath, basename, exists
 
 SUCCESSFULL_EXECUTION = 0
 USER_ERROR = 1 # argument format is fine, but content is wrong
@@ -68,10 +83,10 @@ def main():
     setup_logging()
     if args.logging_level: conf['logging_level'] = args.logging_level
     logger.setLevel(conf['logging_level'])
-    logger.debug('Configuration: ' + str(conf))
-    logger.debug('Script folder: ' + uv(script_path))
-    logger.debug('Working directory: ' + uv(working_directory))
-    logger.debug('Arguments: ' + str(sys.argv))
+    logger.debug('Configuration: {}'.format(str(conf)))
+    logger.debug('Script folder: {}'.format(uv(script_path)))
+    logger.debug('Working directory: {}'.format(uv(working_directory)))
+    logger.debug('Arguments: {}'.format(str(sys.argv)))
 
     if len(sys.argv) == 1:
         parser.print_help(sys.stderr)
@@ -414,7 +429,7 @@ class BadTestResult:
         self.testcase = testcase
         self.result = result
     def str(self):
-        return '[' + self.testcase.dataset.name + '/' + self.testcase.name + ' ' + result.short_string + ']'
+        return '[' + self.testcase.dataset.name + '/' + self.testcase.name + ' ' + self.result.short_string + ']'
 
 class Mechanism(enum.Enum):
     judge = 'judge' # it can decide whether the output is correct or not
@@ -604,19 +619,9 @@ def validate_testcases(validators, datasets):
 
 # == Main invocation =============================================================
 
-# to enable autocomplete do the following
-# install argcomplete: pip3 install argcomplete
-# add to .bashrc: eval "$(register-python-argcomplete algo)"
-# create either alias or symlink named "algo" to this file
-try:
-    import argcomplete
-    argcomplete.autocomplete(parser)
-except ModuleNotFoundError: pass
-
 if __name__ == '__main__':
     try:
         sys.exit(main())
     except KeyboardInterrupt:
         print()
         logger.critical('Manually interrupted!')
-
