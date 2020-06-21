@@ -85,6 +85,9 @@ def main():
         return SUCCESSFULL_EXECUTION
 
     problem_query = args.problem_query
+    # default problem folder is the current working directory (default help command would have to be disabled)
+    # if problem_query is None and exists(join(working_directory, conf['def_file'])):
+    #     problem_query = working_directory
     if problem_query is None:
         logger.error('Problem ID was not supplied! Add -P <problem location/id> argument.')
         return SUCCESSFULL_EXECUTION
