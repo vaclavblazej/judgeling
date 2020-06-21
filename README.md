@@ -3,31 +3,31 @@
 ## Setup
 
 First, download this repository by running.
-```
+```bash
 $ git clone https://gitlab.fit.cvut.cz/acm/acm-algo.git
 ```
 
 Now, you can add a symbolic link to `./algo.sh` to your path, e.g. `~/bin`, so that you can run this script from any location.
-```
+```bash
 $ ln -s "$PWD/acm-algo/algo.py" ~/bin/algo
 ```
 
 Also, to be able to use common problem definitions, download the problem repository.
-```
+```bash
 $ git clone https://gitlab.fit.cvut.cz/acm/acm-problems.git
 ```
 
 ## Basic usage
 
 To test your code run:
-```
+```bash
 $ algo -P PROBLEM_ID -S [SOLUTION.cpp ...]
 ```
 The `PROBLEM_ID` either represents path to local problem definition, or a problem name from `acm-problems` repository (e.g. *sort*).
 
 The script will compile your code and run it against respective datasets.
 
-```
+```bash
 $ algo -P sort -S default_library_sort.cpp radix_sort.cpp
 Generating .................................................. done
 2019-11-02 19:38:36,070 - INFO - Testing validity of testcases
@@ -54,7 +54,7 @@ Generating .................................................. done
 You will see which of the testcases were failed and possibly some additional information from the checker/judge to help with debugging.
 To test against specific datasets or testcases using dataset regex `-D` and testcase regex `-T` arguments.
 
-```
+```bash
 $ algo -P sort -S default_library_sort.cpp radix_sort.cpp -T 007
 Generating .................................................. done
 2019-11-02 19:42:55,168 - INFO - Testing validity of testcases
@@ -112,37 +112,37 @@ The folder/file structure in problems folder represents the primary categorizati
 Each part can be either a cpp/py/sh file directly, or a directory containing several of such files.
 
 #### Solution
-```
+```bash
 my_sol time_result_file < testcase_input > solution_testcase_output
 ```
 
 #### Generator (gen)
-```
+```bash
 gen random_generator_seed dataset_folder
 ```
 
 #### Validator (val)
-```
+```bash
 val < testcase_input
 ```
 
 #### Judge (jud)
-```
+```bash
 jud testcase_input solution_testcase_output
 ```
 
 #### Checker (chk)
-```
+```bash
 chk testcase_correct_output solution_testcase_output
 ```
 
 #### Referential solution (sol)
-```
+```bash
 sol < testcase_input > referential_testcase_output
 ```
 
 #### Painter (pic)
-```
+```bash
 pic testcase_drawing testcase_input testcase_correct_output
 ```
 
