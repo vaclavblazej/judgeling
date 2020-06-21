@@ -1,18 +1,26 @@
 # Tools to manage algorithm definitions, problem definitions, and their solutions
 
+It is NOT designed to
+* search for user's solutions
+* create problem defintion scaffolding
+* todo ...
+
 ## Setup
 
 First, download this repository by running.
+
 ```bash
 $ git clone https://gitlab.fit.cvut.cz/acm/acm-algo.git
 ```
 
 Now, you can add a symbolic link to `./algo.sh` to your path, e.g. `~/bin`, so that you can run this script from any location.
+
 ```bash
 $ ln -s "$PWD/acm-algo/algo.py" ~/bin/algo
 ```
 
 Also, to be able to use common problem definitions, download the problem repository.
+
 ```bash
 $ git clone https://gitlab.fit.cvut.cz/acm/acm-problems.git
 ```
@@ -20,9 +28,11 @@ $ git clone https://gitlab.fit.cvut.cz/acm/acm-problems.git
 ## Basic usage
 
 To test your code run:
+
 ```bash
 $ algo -P PROBLEM_ID -S [SOLUTION.cpp ...]
 ```
+
 The `PROBLEM_ID` either represents path to local problem definition, or a problem name from `acm-problems` repository (e.g. *sort*).
 
 The script will compile your code and run it against respective datasets.
@@ -183,23 +193,12 @@ The structure is as follows.
     ...
 ```
 
+# TODOS
 
-## Browser (work in progress)
-
-This set is bundled with web browser for this repository.
-It works by running a backend (python3 django) server which manages files in this repository and provides API to change them.
-The frontend (react) then hooks into this api, and displays the result.
-
-Setup by installing *python3* and *python's django* package.
-
-```bash
-apt install python3 python3-pip
-pip3 install django
-```
-
-Start it with the following command, which will give you further instructions.
-
-```bash
-todo ...
-```
-
+add precise time measurements
+add java compilation and running
+add generator parameters to enable:
+* supplying inputs online
+* ? option to define dataset size ?
+simplification of testcases to find small bad testcase - 'min' program
+more comprehensive convering with tests
