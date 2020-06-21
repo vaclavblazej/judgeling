@@ -121,7 +121,7 @@ def main():
     for solution in solutions:
         solution.compile()
 
-    project_config_folder = join(problem_def_path, .algo_config.json)
+    project_config_folder = join(problem_def_path, '.algo_config.json')
     conf.update(load_configuration(project_config_folder))
 
     # generates input datasets
