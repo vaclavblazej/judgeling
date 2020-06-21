@@ -13,6 +13,7 @@ import logging
 import os
 import random
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -63,10 +64,11 @@ version = '0.1.5'
 # == Main Logic ==================================================================
 
 def main():
-    configure()
+    setup_logging()
+    conf.update(load_configuration(global_config_folder))
+    conf.update(load_configuration(local_config_folder))
     global args
     args = parser.parse_args()
-    setup_logging()
     if args.logging_level: conf['logging_level'] = args.logging_level
     logger.setLevel(conf['logging_level'])
     logger.debug('Configuration: {}'.format(str(conf)))
@@ -122,27 +124,23 @@ def main():
     for solution in solutions:
         solution.compile()
 
-    project_config_folder = join(problem_def_path, '.algo_config.json')
+    project_config_folder = join(problem_folder, '.algo_config.json')
     conf.update(load_configuration(project_config_folder))
 
-    # generates input datasets
-    generator_files = get_file_or_folder(problem_folder, conf['generator'])
+    file_structure = conf['file_structure']
+    generator_files = get_file_or_folder(problem_folder, file_structure['generator'])
     generators = None
     if generator_files: generators = [Generator(g.source_file) for g in generator_files]
-    # gets the input and determines if it matches the problem definition
-    validators = get_file_or_folder(problem_folder, conf['validator'])
-    # creates visual representation of inputs
-    painters = get_file_or_folder(problem_folder, conf['painter'])
-    # gets the input and contestant's output and checks that the output is correct
-    judges = get_file_or_folder(problem_folder, conf['judge'])
-    # referential solution used to produce correct output to compare with
-    raw_ref_solutions = get_file_or_folder(problem_folder, conf['solution'])
+    validators = get_file_or_folder(problem_folder, file_structure['validator'])
+    painters = get_file_or_folder(problem_folder, file_structure['painter'])
+    judges = get_file_or_folder(problem_folder, file_structure['judge'])
+    raw_ref_solutions = get_file_or_folder(problem_folder, file_structure['solution'])
     if raw_ref_solutions:
         referential_solutions = [Solution(x.source_file) for x in raw_ref_solutions]
     else:
         referential_solutions = None
     # compares one solution against referential solution if it is correct
-    checkers = get_file_or_folder(problem_folder, conf['checker'])
+    checkers = get_file_or_folder(problem_folder, file_structure['checker'])
 
     logger.verbose('This problem has:')
     if generators: logger.verbose('Generators: ' + str(len(generators)))
@@ -397,7 +395,7 @@ class Timer:
     def __init__(self):
         self.total = 0.0
         self.max = 0.0
-        self.start_time
+        self.start_time = 0.0
 
     def start(self):
         run_info = self.get_info()
@@ -467,11 +465,9 @@ def setup_logging():
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
-def configure():
-    conf.update(load_configuration(global_config_folder))
-    conf.update(load_configuration(local_config_folder))
-
 def load_configuration(config_file_location):
+    global logger
+    logger.verbose("load configuration {}".format(config_file_location))
     try:
         with open(config_file_location) as config_file:
             data = json.load(config_file)
@@ -510,8 +506,15 @@ def compile_src(src_file, build_path) -> str:
     compilation = []
     for language in conf['languages']['compiled']:
         if extension in language['extensions']:
-            compilation = [language['command']]
-            # todo
+            compilation_command_string = language['command']
+            substitutions = {
+                "flag": "algo",
+                "exe": exe_file,
+                "source": src_file
+            }
+            for key, value in substitutions.items():
+                compilation_command_string = compilation_command_string.replace(key, value)
+            compilation = shlex.split(compilation_command_string)
     if extension in ['cpp', 'C', 'c']:
         compilation = ['g++'] + conf['cflags'] + ['-o', exe_file, src_file]
     if len(compilation):

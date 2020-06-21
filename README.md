@@ -127,16 +127,25 @@ my_sol time_result_file < testcase_input > solution_testcase_output
 ```
 
 #### Generator (gen)
+
+generates input datasets
+
 ```bash
 gen random_generator_seed dataset_folder
 ```
 
 #### Validator (val)
+
+gets the input and determines if it matches the problem definition
+
 ```bash
 val < testcase_input
 ```
 
 #### Judge (jud)
+
+gets the input and contestant's output and checks that the output is correct
+
 ```bash
 jud testcase_input solution_testcase_output
 ```
@@ -147,11 +156,17 @@ chk testcase_correct_output solution_testcase_output
 ```
 
 #### Referential solution (sol)
+
+referential solution used to produce correct output to compare with
+
 ```bash
 sol < testcase_input > referential_testcase_output
 ```
 
 #### Painter (pic)
+
+creates visual representation of inputs
+
 ```bash
 pic testcase_drawing testcase_input testcase_correct_output
 ```
