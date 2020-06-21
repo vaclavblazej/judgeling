@@ -487,18 +487,18 @@ def get_file_or_folder(problem_folder, base_name, class_name=Program):
         return res
     return None
 
-def compile_src(src_file, build_path):
+def compile_src(src_file, build_path) -> str:
     extension = file_extension(src_file)
-    # interpreted languages can be run directly
+    exe_file = None
     if extension in conf['languages']['interpreted']:
-        return src_file
+        exe_file = src_file
     base_src_name = bare_filename(src_file)
     exe_file = join(build_path, base_src_name + '.exe')
     compilation = []
-    # for language in conf['compiled']:
-        # if extension in language['extensions']:
-            # compilation = [language['command']]
-            # TODO
+    for language in conf['languages']['compiled']:
+        if extension in language['extensions']:
+            compilation = [language['command']]
+            # todo
     if extension in ['cpp', 'C', 'c']:
         compilation = ['g++'] + conf['cflags'] + ['-o', exe_file, src_file]
     if len(compilation):
@@ -514,8 +514,9 @@ def compile_src(src_file, build_path):
             raise Exception('Unable to compile source code: ' + uv(src_file))
         logger.verbose('Compilation return code: ' + str(res.returncode))
         hash_src.save()
-        return exe_file
-    raise Exception('Unknown source extension ' + uv(extension) + ' for file ' + uv(src_file) + ', and so algo does not know how to prepare it to be runnable.')
+    if not exe_file:
+        raise Exception('Unknown source extension ' + uv(extension) + ' for file ' + uv(src_file) + ', and so algo does not know how to prepare it to be runnable.')
+    return exe_file
 
 def find_problem_folder(problem_query):
     logger.verbose('Problem id: ' + uv(problem_query))
