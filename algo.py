@@ -122,23 +122,23 @@ def main():
         solution.compile()
 
     # generates input datasets
-    generator_files = get_file_or_folder(problem_folder, 'gen')
+    generator_files = get_file_or_folder(problem_folder, conf['generator'])
     generators = None
     if generator_files: generators = [Generator(g.source_file) for g in generator_files]
     # gets the input and determines if it matches the problem definition
-    validators = get_file_or_folder(problem_folder, 'val')
+    validators = get_file_or_folder(problem_folder, conf['validator'])
     # creates visual representation of inputs
-    painters = get_file_or_folder(problem_folder, 'pic')
+    painters = get_file_or_folder(problem_folder, conf['painter'])
     # gets the input and contestant's output and checks that the output is correct
-    judges = get_file_or_folder(problem_folder, 'jud')
+    judges = get_file_or_folder(problem_folder, conf['judge'])
     # referential solution used to produce correct output to compare with
-    raw_ref_solutions = get_file_or_folder(problem_folder, 'sol')
+    raw_ref_solutions = get_file_or_folder(problem_folder, conf['solution'])
     if raw_ref_solutions:
         referential_solutions = [Solution(x.source_file) for x in raw_ref_solutions]
     else:
         referential_solutions = None
     # compares one solution against referential solution if it is correct
-    checkers = get_file_or_folder(problem_folder, 'chk')
+    checkers = get_file_or_folder(problem_folder, conf['checker'])
 
     logger.verbose('This problem has:')
     if generators: logger.verbose('Generators: ' + str(len(generators)))

@@ -21,5 +21,13 @@
             }
         ]
     },
+    "file_structure": {
+        "generator": "gen",
+        "validator": "val",
+        "painter": "pic",
+        "judge": "jud",
+        "solution": "sol",
+        "checker": "chk"
+    },
     "time_limit_seconds": 30
 }
