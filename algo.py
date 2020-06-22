@@ -40,17 +40,18 @@ parser = ArgumentParser(
         description='Test algorithm implementations on problem definitions',
         epilog='Confront documentation of this script for examples and usage of various concepts.'
         )
-parser.add_argument('--version', dest='version', action='store_true', help='prints out version information')
+# help as '-h' and '--help' is added by default
+parser.add_argument('-V', '--version', dest='version', action='store_true', help='print out the version')
 parser.add_argument('-P', '--problem', dest='problem_query', help='problem definition to be run')
 parser.add_argument('-S', '--solution', dest='solution', nargs='+', help='user\'s files with his own solutions to the problem')
 parser.add_argument('-D', '--dataset', dest='dataset_regex', help='filter used datasets using regex')
 parser.add_argument('-T', '--testcase', dest='testcase_regex', help='filter used testcases using regex')
 parser.add_argument('--seed', dest='seed', help='provide a rng seed for dataset generators')
-parser.add_argument('--draw', dest='draw', action='store_true', help='creates drawings of testcases using pic program')
-parser.add_argument('--input', dest='input', nargs='+', help='supplies input data files manually')
+parser.add_argument('--draw', dest='draw', action='store_true', help='create drawings of testcases using the pic program')
+parser.add_argument('--input', dest='input', nargs='+', help='supply input data files manually')
 parser.add_argument('-g', '--force-gen', dest='force_generation', action='store_true', help='force the data generators to run again')
 parser.add_argument('-q', '--quiet', dest='logging_level', const=QUIET_LEVEL, action='store_const', help='no output will be shown')
-parser.add_argument('-v', '--verbose', dest='logging_level', const=VERBOSE_LEVEL, action='store_const', help='more detailed info about testing shown')
+parser.add_argument('-v', '--verbose', dest='logging_level', const=VERBOSE_LEVEL, action='store_const', help='more detailed info about testing')
 parser.add_argument('-d', '--debug', dest='logging_level', const=logging.DEBUG, action='store_const', help='very detailed messages of script\'s inner workings')
 
 conf = { 'logging_level': logging.INFO, } # logging is set up before config loads
