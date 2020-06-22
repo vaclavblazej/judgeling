@@ -76,10 +76,6 @@ def main():
     logger.debug('Working directory: {}'.format(uv(working_directory)))
     logger.debug('Arguments: {}'.format(str(sys.argv)))
 
-    if len(sys.argv) == 1:
-        parser.print_help(sys.stderr)
-        return SUCCESSFULL_EXECUTION
-
     if args.version:
         print('algo version ' + version)
         return SUCCESSFULL_EXECUTION
