@@ -1,0 +1,9 @@
+# Pre-commit hooks. Enforces ruff formatting on commit.
+# Install once per clone with: uv run pre-commit install
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    # Keep in sync with the ruff version pinned in uv.lock.
+    rev: v0.16.0
+    hooks:
+      # Fails the commit if any file is not ruff-formatted (and reformats it).
+      - id: ruff-format

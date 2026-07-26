@@ -95,10 +95,11 @@ conf: dict[str, Any] = {
     "logging_level": logging.INFO,
 }  # logging is set up before config loads
 script_path = dirname(realpath(__file__))
+project_root = dirname(script_path)  # repo root; algo.py lives in src/
 working_directory = os.getcwd()
-global_config_folder = join(script_path, "config.json")
-local_config_folder = join(script_path, "config_local.json")
-problem_search_location = realpath(join(script_path, "..", "acm-problems/problems"))
+global_config_folder = join(project_root, "config.json")
+local_config_folder = join(project_root, "config_local.json")
+problem_search_location = realpath(join(project_root, "..", "acm-problems/problems"))
 version = "0.1.5"
 
 # == Main Logic ==================================================================
