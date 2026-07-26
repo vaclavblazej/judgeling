@@ -22,6 +22,7 @@ import sys
 import resource
 
 from os.path import join, dirname, realpath, basename, exists
+from typing import Any, cast
 
 SUCCESSFULL_EXECUTION = 0
 USER_ERROR = 1 # argument format is fine, but content is wrong
@@ -30,6 +31,15 @@ INVALID_ARGUMENT = 129 # argument format is wrong
 
 VERBOSE_LEVEL = 15
 QUIET_LEVEL = 60
+
+class VerboseLogger(logging.Logger):
+    """Logger with an extra VERBOSE level sitting between INFO and DEBUG."""
+    def verbose(self, message, *args, **kws):
+        if self.isEnabledFor(VERBOSE_LEVEL):
+            self._log(VERBOSE_LEVEL, message, args, **kws)
+
+logging.setLoggerClass(VerboseLogger)
+logger: VerboseLogger = cast(VerboseLogger, logging.getLogger('algo')) # handlers/level configured in setup_logging()
 
 class ArgumentParser(argparse.ArgumentParser): # bad argument exit code override
     def error(self, message):
@@ -54,7 +64,7 @@ parser.add_argument('-q', '--quiet', dest='logging_level', const=QUIET_LEVEL, ac
 parser.add_argument('-v', '--verbose', dest='logging_level', const=VERBOSE_LEVEL, action='store_const', help='more detailed info about testing')
 parser.add_argument('-d', '--debug', dest='logging_level', const=logging.DEBUG, action='store_const', help='very detailed messages of script\'s inner workings')
 
-conf = { 'logging_level': logging.INFO, } # logging is set up before config loads
+conf: dict[str, Any] = { 'logging_level': logging.INFO, } # logging is set up before config loads
 script_path = dirname(realpath(__file__))
 working_directory = os.getcwd()
 global_config_folder = join(script_path, 'config.json')
@@ -129,8 +139,7 @@ def main():
 
     file_structure = conf['file_structure']
     generator_files = get_file_or_folder(problem_folder, file_structure['generator'])
-    generators = None
-    if generator_files: generators = [Generator(g.source_file) for g in generator_files]
+    generators = [Generator(g.source_file) for g in generator_files] if generator_files else []
     validators = get_file_or_folder(problem_folder, file_structure['validator'])
     painters = get_file_or_folder(problem_folder, file_structure['painter'])
     judges = get_file_or_folder(problem_folder, file_structure['judge'])
@@ -138,7 +147,7 @@ def main():
     if raw_ref_solutions:
         referential_solutions = [Solution(x.source_file) for x in raw_ref_solutions]
     else:
-        referential_solutions = None
+        referential_solutions = []
     # compares one solution against referential solution if it is correct
     checkers = get_file_or_folder(problem_folder, file_structure['checker'])
 
@@ -260,6 +269,7 @@ def main():
                     result = Result.TIMELIMIT_EXCEEDED
                     solution.disqualified = True
                 if result == Result.DEFAULT_FLAG:
+                    result_num = Result.BAD_INVOCATION.num # defensive default; every real mechanism overrides it below
                     if mechanism == Mechanism.judge:
                         result_num = judges[0].run([testcase.input, solution_testcase_out])
                     elif mechanism in [Mechanism.checker,Mechanism.cross_check]:
@@ -355,7 +365,7 @@ class Generator(Program):
         return run_return_code
 
 class Testcase:
-    def __init__(self, testcase_input_file:str, dataset:str):
+    def __init__(self, testcase_input_file:str, dataset:'Dataset'):
         self.input = testcase_input_file
         self.dataset = dataset
         self.name = bare_filename(self.input)
@@ -367,7 +377,7 @@ class Dataset:
     def __init__(self, dataset_folder:str):
         self.name = basename(dataset_folder)
         self.data_folder = join(data_path, self.name)
-        self.testcases = None
+        self.testcases: list[Testcase] = []
     def get_testcases(self, testcase_regex):
         if testcase_regex is None:
             testcase_regex = '*'
@@ -454,12 +464,6 @@ class Result(enum.Enum):
 
 def setup_logging():
     logging.addLevelName(VERBOSE_LEVEL, 'VERBOSE')
-    def verbose(self, message, *args, **kws):
-        if self.isEnabledFor(VERBOSE_LEVEL):
-            self._log(VERBOSE_LEVEL, message, args, **kws)
-    logging.Logger.verbose = verbose
-    global logger
-    logger = logging.getLogger()
     handler = logging.StreamHandler()
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
     handler.setFormatter(formatter)
@@ -483,7 +487,7 @@ def bare_filename(file_location):
 def file_extension(file_location):
     return basename(file_location).split('.')[1]
 
-def get_file_or_folder(problem_folder, base_name, class_name=Program):
+def get_file_or_folder(problem_folder, base_name, class_name=Program) -> list:
     for ext in conf['extensions']:
         base_file_path = join(problem_folder, base_name + ext)
         if exists(base_file_path):
@@ -494,7 +498,7 @@ def get_file_or_folder(problem_folder, base_name, class_name=Program):
         for ext in conf['extensions']:
             res.extend([class_name(x) for x in list(glob.glob(join(base_folder_path, '*'+ext)))])
         return res
-    return None
+    return []
 
 def compile_src(src_file, build_path) -> str:
     extension = file_extension(src_file)
