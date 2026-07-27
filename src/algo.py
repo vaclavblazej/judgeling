@@ -3,25 +3,25 @@
 
 # This script provides a testing interface for solutions to problems which are defined in standard format.
 
-import argparse
+import contextlib
 import enum
-import glob
 import hashlib
 import itertools
 import json
 import logging
 import os
 import random
-import re
-import shlex
-import shutil
-import subprocess
-import sys
 
 # unix specific, for measuring time, see https://stackoverflow.com/questions/16701310/get-how-much-time-python-subprocess-spends/16701365
 import resource
-
-from os.path import join, dirname, realpath, basename, exists
+import shlex
+import shutil
+import subprocess
+from argparse import ArgumentParser
+from glob import glob
+from os.path import basename, dirname, exists, join, realpath
+from re import search
+from sys import argv, exit, stderr
 from typing import Any, cast
 
 SUCCESSFULL_EXECUTION = 0
@@ -32,6 +32,9 @@ INVALID_ARGUMENT = 129  # argument format is wrong
 VERBOSE_LEVEL = 15
 QUIET_LEVEL = 60
 
+
+class AlgoException(Exception):
+    pass
 
 class VerboseLogger(logging.Logger):
     """Logger with an extra VERBOSE level sitting between INFO and DEBUG."""
@@ -45,13 +48,13 @@ logging.setLoggerClass(VerboseLogger)
 logger: VerboseLogger = cast(VerboseLogger, logging.getLogger("algo"))  # handlers/level configured in setup_logging()
 
 
-class ArgumentParser(argparse.ArgumentParser):  # bad argument exit code override
+class AlgoArgumentParser(ArgumentParser):  # bad argument exit code override
     def error(self, message):
-        self.print_usage(sys.stderr)
-        self.exit(INVALID_ARGUMENT, "%s: error: %s\n" % (self.prog, message))
+        self.print_usage(stderr)
+        self.exit(INVALID_ARGUMENT, f"{self.prog}: error: {message}\n")
 
 
-parser = ArgumentParser(
+parser = AlgoArgumentParser(
     description="Test algorithm implementations on problem definitions",
     epilog="Confront documentation of this script for examples and usage of various concepts.",
 )
@@ -114,10 +117,10 @@ def main():
     if args.logging_level:
         conf["logging_level"] = args.logging_level
     logger.setLevel(conf["logging_level"])
-    logger.debug("Configuration: {}".format(str(conf)))
-    logger.debug("Script folder: {}".format(uv(script_path)))
-    logger.debug("Working directory: {}".format(uv(working_directory)))
-    logger.debug("Arguments: {}".format(str(sys.argv)))
+    logger.debug(f"Configuration: {conf}")
+    logger.debug(f"Script folder: {uv(script_path)}")
+    logger.debug(f"Working directory: {uv(working_directory)}")
+    logger.debug(f"Arguments: {argv}")
 
     if args.version:
         print("algo version " + version)
@@ -225,7 +228,7 @@ def main():
         datasets = [Dataset(manual_input_folder)]
     else:
         if not args.force_generation and args.dataset_regex:
-            generators = [g for g in generators if re.search(args.dataset_regex, g.name)]
+            generators = [g for g in generators if search(args.dataset_regex, g.name)]
         for generator in generators:
             logger.debug("Generator output folder: " + generator.data_folder)
             if generator.generate() != 0:
@@ -238,7 +241,7 @@ def main():
 
         datasets = [Dataset(g.data_folder) for g in generators]
         if args.dataset_regex:
-            datasets = [d for d in datasets if re.search(args.dataset_regex, d.name)]
+            datasets = [d for d in datasets if search(args.dataset_regex, d.name)]
 
     for dataset in datasets:
         dataset.get_testcases(args.testcase_regex)
@@ -313,7 +316,7 @@ def main():
                         logger.info("<<<")
                         result = Result.RUNTIME_ERROR
                         solution.disqualified = True
-                except subprocess.TimeoutExpired as ex:
+                except subprocess.TimeoutExpired:
                     solution.timer.stop()
                     result = Result.TIMELIMIT_EXCEEDED
                     solution.disqualified = True
@@ -390,7 +393,9 @@ class Program:
     def compile(self):
         self.exe = compile_src(self.source_file, build_path)
 
-    def run(self, args=[], input_file=None, output_file=None, timeout=None):
+    def run(self, args=None, input_file=None, output_file=None, timeout=None):
+        if args is None:
+            args = []
         logger.debug("Running: " + uv(self.name) + ", arguments: " + str([self.exe] + args))
         if input_file:
             logger.debug("Input: " + input_file)
@@ -398,20 +403,19 @@ class Program:
             logger.debug("Output: " + output_file)
         if timeout:
             logger.debug("Timeout: " + str(timeout))
-        in_file = None
-        if input_file:
-            in_file = open(input_file)
-        out_file = None
-        if output_file:
-            out_file = open(output_file, "w")
-        p = subprocess.Popen([self.exe] + args, stdin=in_file, stdout=out_file)
-        try:
-            p.wait(timeout)
-        except subprocess.TimeoutExpired as ex:
-            p.kill()
-            raise ex
-        if out_file:
-            out_file.flush()
+        with (
+            open(input_file) if input_file else contextlib.nullcontext()
+        ) as in_file, (
+            open(output_file, "w") if output_file else contextlib.nullcontext()
+        ) as out_file:
+            p = subprocess.Popen([self.exe] + args, stdin=in_file, stdout=out_file)
+            try:
+                p.wait(timeout)
+            except subprocess.TimeoutExpired:
+                p.kill()
+                raise
+            if out_file:
+                out_file.flush()
         logger.debug("Program run returns: " + str(p.returncode))
         return p.returncode
 
@@ -466,7 +470,7 @@ class Dataset:
         if testcase_regex is None:
             testcase_regex = "*"
         logger.verbose("Globbing " + self.data_folder)
-        globbed_testcases = list(glob.glob(join(self.data_folder, testcase_regex + conf["in_ext"])))
+        globbed_testcases = list(glob(join(self.data_folder, testcase_regex + conf["in_ext"])))
         globbed_testcases.sort()
         self.testcases = [Testcase(x, self) for x in globbed_testcases]
         logger.verbose("Found " + str(len(self.testcases)) + " testcases.")
@@ -592,7 +596,7 @@ def get_file_or_folder(problem_folder, base_name, class_name=Program) -> list:
     if exists(base_folder_path):
         res = []
         for ext in conf["extensions"]:
-            res.extend([class_name(x) for x in list(glob.glob(join(base_folder_path, "*" + ext)))])
+            res.extend([class_name(x) for x in list(glob(join(base_folder_path, "*" + ext)))])
         return res
     return []
 
@@ -624,11 +628,11 @@ def compile_src(src_file, build_path) -> str:
         logger.verbose("Compile destination: " + uv(exe_file))
         res = subprocess.run(compilation)
         if res.returncode != 0:
-            raise Exception("Unable to compile source code: " + uv(src_file))
+            raise AlgoException(f"Unable to compile source code: {uv(src_file)}")
         logger.verbose("Compilation return code: " + str(res.returncode))
         hash_src.save()
     if not exe_file:
-        raise Exception(
+        raise AlgoException(
             "Unknown source extension "
             + uv(extension)
             + " for file "
@@ -648,7 +652,7 @@ def find_problem_folder(problem_query):
     # search in default problem repository location
     repository_path_regex = join(problem_search_location, "**", problem_query, conf["def_file"])
     logger.debug("Repository path regex: " + uv(repository_path_regex))
-    for def_file in glob.glob(repository_path_regex, recursive=True):
+    for def_file in glob(repository_path_regex, recursive=True):
         # todo if found more than one problem definition, raise a warning
         return dirname(def_file)
     return None
@@ -738,7 +742,7 @@ def validate_testcases(validators, datasets):
 
 if __name__ == "__main__":
     try:
-        sys.exit(main())
+        exit(main())
     except KeyboardInterrupt:
         print()
         logger.critical("Manually interrupted!")
