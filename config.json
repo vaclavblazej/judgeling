@@ -1,5 +1,4 @@
 {
-    "cflags": ["-O2", "-g", "-std=c++17", "-lm", "-pedantic", "-DALGME"],
     "def_file": "def.toml",
     "statistics_file_name": "time.cvs",
     "manual_testcases_folder_name": "_manual",
@@ -10,7 +9,10 @@
     "enable_cache": true,
     "logging_level": 20,
     "languages": {
-        "interpreted": ["py", "sh"],
+        "interpreted": {
+            "py": "python3",
+            "sh": "sh"
+        },
         "compiled": [
             {
                 "extensions": ["c", "cpp", "C"],

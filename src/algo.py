@@ -19,7 +19,7 @@ import shutil
 import subprocess
 from argparse import ArgumentParser
 from glob import glob
-from os.path import basename, dirname, exists, join, realpath
+from os.path import basename, dirname, exists, join, realpath, splitext
 from re import search
 from sys import argv, exit, stderr
 from typing import Any, cast
@@ -227,7 +227,7 @@ def main():
                 logger.error("Supplied input file " + uv(manual_input_file) + " could not be found")
         datasets = [Dataset(manual_input_folder)]
     else:
-        if not args.force_generation and args.dataset_regex:
+        if args.dataset_regex:
             generators = [g for g in generators if search(args.dataset_regex, g.name)]
         for generator in generators:
             logger.debug("Generator output folder: " + generator.data_folder)
@@ -396,7 +396,8 @@ class Program:
     def run(self, args=None, input_file=None, output_file=None, timeout=None):
         if args is None:
             args = []
-        logger.debug("Running: " + uv(self.name) + ", arguments: " + str([self.exe] + args))
+        command = self.exe + args
+        logger.debug("Running: " + uv(self.name) + ", arguments: " + str(command))
         if input_file:
             logger.debug("Input: " + input_file)
         if output_file:
@@ -408,7 +409,7 @@ class Program:
         ) as in_file, (
             open(output_file, "w") if output_file else contextlib.nullcontext()
         ) as out_file:
-            p = subprocess.Popen([self.exe] + args, stdin=in_file, stdout=out_file)
+            p = subprocess.Popen(command, stdin=in_file, stdout=out_file)
             try:
                 p.wait(timeout)
             except subprocess.TimeoutExpired:
@@ -451,7 +452,7 @@ class Generator(Program):
 
 
 class Testcase:
-    def __init__(self, testcase_input_file: str, dataset: "Dataset"):
+    def __init__(self, testcase_input_file: str, dataset: Dataset):
         self.input = testcase_input_file
         self.dataset = dataset
         self.name = bare_filename(self.input)
@@ -567,12 +568,12 @@ def setup_logging():
 
 def load_configuration(config_file_location):
     global logger
-    logger.verbose("load configuration {}".format(config_file_location))
+    logger.verbose(f"load configuration {config_file_location}")
     try:
         with open(config_file_location) as config_file:
             data = json.load(config_file)
     except FileNotFoundError:
-        return dict()
+        return {}
     return data
 
 
@@ -580,11 +581,11 @@ def load_configuration(config_file_location):
 
 
 def bare_filename(file_location):
-    return basename(file_location).split(".")[0]
+    return splitext(basename(file_location))[0]
 
 
 def file_extension(file_location):
-    return basename(file_location).split(".")[1]
+    return splitext(basename(file_location))[1].lstrip(".")
 
 
 def get_file_or_folder(problem_folder, base_name, class_name=Program) -> list:
@@ -601,37 +602,23 @@ def get_file_or_folder(problem_folder, base_name, class_name=Program) -> list:
     return []
 
 
-def compile_src(src_file, build_path) -> str:
+def compile_src(src_file, build_path) -> list[str]:
     extension = file_extension(src_file)
-    exe_file = None
-    if extension in conf["languages"]["interpreted"]:
-        exe_file = src_file
+    interpreters = conf["languages"]["interpreted"]
+    if extension in interpreters:
+        return [interpreters[extension], src_file]
+
     base_src_name = bare_filename(src_file)
     exe_file = join(build_path, base_src_name + ".exe")
     compilation = []
     for language in conf["languages"]["compiled"]:
         if extension in language["extensions"]:
             compilation_command_string = language["command"]
-            substitutions = {"flag": "algo", "exe": exe_file, "source": src_file}
+            substitutions = {"flag": "ALGME", "exe": exe_file, "source": src_file}
             for key, value in substitutions.items():
-                compilation_command_string = compilation_command_string.replace(key, value)
+                compilation_command_string = compilation_command_string.replace("{" + key + "}", value)
             compilation = shlex.split(compilation_command_string)
-    if extension in ["cpp", "C", "c"]:
-        compilation = ["g++"] + conf["cflags"] + ["-o", exe_file, src_file]
-    if len(compilation):
-        os.makedirs(build_path, exist_ok=True)
-        hash_src = HashFile(build_path, src_file)
-        if not hash_src.changed() and exists(exe_file):
-            logger.verbose("Skipped compilation of " + uv(basename(src_file)) + " due to non-changed source file.")
-            return exe_file
-        logger.info("Compiling: " + uv(basename(src_file)))
-        logger.verbose("Compile destination: " + uv(exe_file))
-        res = subprocess.run(compilation)
-        if res.returncode != 0:
-            raise AlgoException(f"Unable to compile source code: {uv(src_file)}")
-        logger.verbose("Compilation return code: " + str(res.returncode))
-        hash_src.save()
-    if not exe_file:
+    if not compilation:
         raise AlgoException(
             "Unknown source extension "
             + uv(extension)
@@ -639,7 +626,19 @@ def compile_src(src_file, build_path) -> str:
             + uv(src_file)
             + ", and so algo does not know how to prepare it to be runnable."
         )
-    return exe_file
+    os.makedirs(build_path, exist_ok=True)
+    hash_src = HashFile(build_path, src_file)
+    if not hash_src.changed() and exists(exe_file):
+        logger.verbose("Skipped compilation of " + uv(basename(src_file)) + " due to non-changed source file.")
+        return [exe_file]
+    logger.info("Compiling: " + uv(basename(src_file)))
+    logger.verbose("Compile destination: " + uv(exe_file))
+    res = subprocess.run(compilation)
+    if res.returncode != 0:
+        raise AlgoException(f"Unable to compile source code: {uv(src_file)}")
+    logger.verbose("Compilation return code: " + str(res.returncode))
+    hash_src.save()
+    return [exe_file]
 
 
 def find_problem_folder(problem_query):
