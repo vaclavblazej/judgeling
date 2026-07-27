@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-import unittest, subprocess
-import importlib, sys, os
+import os
+import subprocess
+import sys
+import unittest
 
-sys.path.append(os.path.abspath('..'))
+sys.path.append(os.path.abspath('../src'))
 import algo
 
-script = '../algo.py'
+script = '../src/algo.py'
 
 def run(args=[], input_file=None, output_file=None, error_file=None, timeout=None):
     in_file = None
@@ -22,6 +24,13 @@ def run(args=[], input_file=None, output_file=None, error_file=None, timeout=Non
     if out_file and out_file != subprocess.DEVNULL: out_file.flush()
     if err_file and err_file != subprocess.DEVNULL: err_file.flush()
     return p.returncode
+
+
+def run_capturing_stderr(args=None):
+    """Like run(), but also returns the combined stderr (where algo's log messages go)."""
+    p = subprocess.run([script] + (args or []), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                        stderr=subprocess.PIPE, text=True, check=False)
+    return p.returncode, p.stderr
 
 
 class TestCall(unittest.TestCase):
@@ -49,11 +58,66 @@ class TestCall(unittest.TestCase):
     def test_return_codes_are_zero_correct_problem(self):
         self.assertEqual(run(['-P', 'example']), algo.SUCCESSFULL_EXECUTION)
 
+    def test_return_codes_are_zero_correct_problem_with_solution(self):
+        self.assertEqual(
+            run(['-P', 'example', '-S', 'example/sol/ref_library_sort.cpp', '-q']), algo.SUCCESSFULL_EXECUTION
+        )
+
+    def test_return_codes_are_zero_with_testcase_filter(self):
+        # narrows the run down to a single testcase, exercising the -T regex path
+        self.assertEqual(
+            run(['-P', 'example', '-S', 'example/sol/ref_library_sort.cpp', '-T', '001', '-q']),
+            algo.SUCCESSFULL_EXECUTION,
+        )
+
+    def test_return_codes_are_zero_manual_input(self):
+        # exercises the --input path, which bypasses generators entirely
+        self.assertEqual(
+            run([
+                '-P', 'example', '-S', 'example/sol/ref_library_sort.cpp',
+                '--input', 'fixtures/manual_input.in', '-q',
+            ]),
+            algo.SUCCESSFULL_EXECUTION,
+        )
+
+    def test_second_run_skips_compilation_due_to_cache(self):
+        # first run populates the source-hash cache
+        self.assertEqual(
+            run(['-P', 'example', '-S', 'example/sol/ref_library_sort.cpp', '-q']), algo.SUCCESSFULL_EXECUTION
+        )
+        return_code, stderr = run_capturing_stderr(
+            ['-P', 'example', '-S', 'example/sol/ref_library_sort.cpp', '-v']
+        )
+        self.assertEqual(return_code, algo.SUCCESSFULL_EXECUTION)
+        self.assertIn('Skipped compilation', stderr)
+
     def test_bad_argument_return_code_bad_argument(self):
         self.assertEqual(run(['-bad_arg']), algo.INVALID_ARGUMENT)
 
     def test_bad_argument_return_code_incorrect_problem(self):
         self.assertEqual(run(['-P', 'non_existant']), algo.USER_ERROR)
+
+    def test_bad_argument_return_code_nonexistent_solution_file(self):
+        self.assertEqual(run(['-P', 'example', '-S', 'example/sol/does_not_exist.cpp']), algo.USER_ERROR)
+
+    def test_problem_error_when_no_checking_mechanism(self):
+        # a problem with no generator/judge/checker/referential solution can't be checked at all
+        self.assertEqual(
+            run(['-P', 'fixtures/no_checker_problem', '-S', 'fixtures/wrong_solution.cpp', '-q']),
+            algo.PROBLEM_ERROR,
+        )
+
+    # == correctness detection =======================================================
+
+    def test_wrong_solution_is_reported_as_wrong_answer(self):
+        return_code, stderr = run_capturing_stderr(
+            ['-P', 'example', '-S', 'fixtures/wrong_solution.cpp']
+        )
+        # algo's exit code does not reflect per-testcase results (see summary), only the
+        # run's own completion, so a wrong solution still exits successfully...
+        self.assertEqual(return_code, algo.SUCCESSFULL_EXECUTION)
+        # ...but the checker must have actually caught the wrong answer along the way.
+        self.assertIn('WA', stderr)
 
     # == return codes ================================================================
 

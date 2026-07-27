@@ -1,4 +1,4 @@
-#include "../../../gen.h"
+#include "gen.h"
 
 int main(int argc, char **argv){
     TestcaseGenerator tg(argc, argv);

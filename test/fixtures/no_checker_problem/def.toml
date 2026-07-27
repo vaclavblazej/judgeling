@@ -1,0 +1,3 @@
+name = "no checking mechanism"
+input = "unused, this fixture has no generator/judge/checker"
+output = "unused, this fixture has no generator/judge/checker"

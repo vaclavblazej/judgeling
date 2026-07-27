@@ -1,17 +1,13 @@
 #include <bits/stdc++.h>
-#include <cassert>
 using namespace std;
 typedef long long ll;
 
+// Deliberately does not sort; used to verify algo detects wrong answers.
 int main(){
     ll N;cin>>N;
-    assert(1 <= N && N <= 3000000);
     vector<ll> a(N);
     for(ll &n:a)cin>>n;
-    for(ll n:a) {
-        assert(0 <= n && n <= 1000000000);
-    }
-    string d;
+    for(ll n:a)cout<<n<<' ';
+    cout<<endl;
     return 0;
 }
-
