@@ -19,7 +19,9 @@
                 "command": "g++ -O2 -g -std=c++17 -lm -pedantic -D{flag} -o {exe} {source}"
             }, {
                 "extensions": ["java"],
-                "command": "javac {source}"
+                "command": "javac -d {build} {source}",
+                "run": "java -cp {build} {class}",
+                "artifact": "{build}/{class}.class"
             }
         ]
     },

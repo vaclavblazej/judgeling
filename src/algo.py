@@ -602,6 +602,13 @@ def get_file_or_folder(problem_folder, base_name, class_name=Program) -> list:
     return []
 
 
+def substitute(template: str, substitutions: dict[str, str]) -> str:
+    result = template
+    for key, value in substitutions.items():
+        result = result.replace("{" + key + "}", value)
+    return result
+
+
 def compile_src(src_file, build_path) -> list[str]:
     extension = file_extension(src_file)
     interpreters = conf["languages"]["interpreted"]
@@ -610,15 +617,12 @@ def compile_src(src_file, build_path) -> list[str]:
 
     base_src_name = bare_filename(src_file)
     exe_file = join(build_path, base_src_name + ".exe")
-    compilation = []
-    for language in conf["languages"]["compiled"]:
-        if extension in language["extensions"]:
-            compilation_command_string = language["command"]
-            substitutions = {"flag": "ALGME", "exe": exe_file, "source": src_file}
-            for key, value in substitutions.items():
-                compilation_command_string = compilation_command_string.replace("{" + key + "}", value)
-            compilation = shlex.split(compilation_command_string)
-    if not compilation:
+    language = None
+    for candidate in conf["languages"]["compiled"]:
+        if extension in candidate["extensions"]:
+            language = candidate
+            break
+    if language is None:
         raise AlgoException(
             "Unknown source extension "
             + uv(extension)
@@ -626,19 +630,27 @@ def compile_src(src_file, build_path) -> list[str]:
             + uv(src_file)
             + ", and so algo does not know how to prepare it to be runnable."
         )
+
+    # "run" and "artifact" let a language compile to something other than a single
+    # directly-executable binary (e.g. Java's javac produces a .class run via `java -cp`).
+    substitutions = {"flag": "ALGME", "exe": exe_file, "source": src_file, "build": build_path, "class": base_src_name}
+    compilation = shlex.split(substitute(language["command"], substitutions))
+    run_command = shlex.split(substitute(language["run"], substitutions)) if "run" in language else [exe_file]
+    artifact = substitute(language.get("artifact", "{exe}"), substitutions)
+
     os.makedirs(build_path, exist_ok=True)
     hash_src = HashFile(build_path, src_file)
-    if not hash_src.changed() and exists(exe_file):
+    if not hash_src.changed() and exists(artifact):
         logger.verbose("Skipped compilation of " + uv(basename(src_file)) + " due to non-changed source file.")
-        return [exe_file]
+        return run_command
     logger.info("Compiling: " + uv(basename(src_file)))
-    logger.verbose("Compile destination: " + uv(exe_file))
+    logger.verbose("Compile destination: " + uv(artifact))
     res = subprocess.run(compilation)
     if res.returncode != 0:
         raise AlgoException(f"Unable to compile source code: {uv(src_file)}")
     logger.verbose("Compilation return code: " + str(res.returncode))
     hash_src.save()
-    return [exe_file]
+    return run_command
 
 
 def find_problem_folder(problem_query):

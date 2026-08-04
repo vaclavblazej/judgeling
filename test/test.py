@@ -80,6 +80,14 @@ class TestCall(unittest.TestCase):
             algo.SUCCESSFULL_EXECUTION,
         )
 
+    def test_java_solution_is_compiled_and_run(self):
+        # exercises the compiled-language "run"/"artifact" template path (javac + java -cp)
+        return_code, stderr = run_capturing_stderr(
+            ['-P', 'example', '-S', 'fixtures/CorrectSolution.java', '-v']
+        )
+        self.assertEqual(return_code, algo.SUCCESSFULL_EXECUTION)
+        self.assertNotIn('WA', stderr)
+
     def test_second_run_skips_compilation_due_to_cache(self):
         # first run populates the source-hash cache
         self.assertEqual(

@@ -211,7 +211,6 @@ The structure is as follows.
 # TODOS
 
 add precise time measurements
-add java compilation and running
 add generator parameters to enable:
 * supplying inputs online
 * ? option to define dataset size ?
