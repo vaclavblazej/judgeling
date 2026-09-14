@@ -567,7 +567,6 @@ def setup_logging():
 
 
 def load_configuration(config_file_location):
-    global logger
     logger.verbose(f"load configuration {config_file_location}")
     try:
         with open(config_file_location) as config_file:
@@ -645,7 +644,7 @@ def compile_src(src_file, build_path) -> list[str]:
         return run_command
     logger.info("Compiling: " + uv(basename(src_file)))
     logger.verbose("Compile destination: " + uv(artifact))
-    res = subprocess.run(compilation)
+    res = subprocess.run(compilation, check=False)
     if res.returncode != 0:
         raise AlgoException(f"Unable to compile source code: {uv(src_file)}")
     logger.verbose("Compilation return code: " + str(res.returncode))

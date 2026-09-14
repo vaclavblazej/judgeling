@@ -215,4 +215,3 @@ add generator parameters to enable:
 * supplying inputs online
 * ? option to define dataset size ?
 simplification of testcases to find small bad testcase - 'min' program
-more comprehensive convering with tests

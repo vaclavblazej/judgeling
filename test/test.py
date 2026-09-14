@@ -70,6 +70,16 @@ class TestCall(unittest.TestCase):
             algo.SUCCESSFULL_EXECUTION,
         )
 
+    def test_dataset_regex_filters_generators(self):
+        # exercises the -D regex path; test/example has two generators ("small" and
+        # "tiny"), so filtering to "tiny" must run that dataset and skip the other
+        return_code, stderr = run_capturing_stderr([
+            '-P', 'example', '-S', 'example/sol/ref_library_sort.cpp', '-D', 'tiny',
+        ])
+        self.assertEqual(return_code, algo.SUCCESSFULL_EXECUTION)
+        self.assertIn('Dataset tiny', stderr)
+        self.assertNotIn('Dataset small', stderr)
+
     def test_return_codes_are_zero_manual_input(self):
         # exercises the --input path, which bypasses generators entirely
         self.assertEqual(
@@ -115,6 +125,38 @@ class TestCall(unittest.TestCase):
             algo.PROBLEM_ERROR,
         )
 
+    def test_bad_invocation_from_broken_checker_is_problem_error(self):
+        # a checker that always signals bad invocation (return code 43) must not be
+        # mistaken for a valid WA/PE/RE/TLE result
+        self.assertEqual(
+            run(['-P', 'fixtures/broken_checker_problem', '-S', 'example/sol/ref_library_sort.cpp', '-q']),
+            algo.PROBLEM_ERROR,
+        )
+
+    def test_generator_failure_is_problem_error(self):
+        # a generator that exits nonzero must not be treated as producing an empty dataset
+        self.assertEqual(
+            run(['-P', 'fixtures/broken_generator_problem', '-S', 'fixtures/wrong_solution.cpp', '-q']),
+            algo.PROBLEM_ERROR,
+        )
+
+    def test_invalid_manual_input_is_rejected_by_validator(self):
+        # exercises validate_testcases()'s failure path via test/example's val.cpp
+        # --input copies its file into example's shared .tmp/data/_manual folder and never
+        # removes it, so clean up afterwards to avoid polluting other manual-input tests
+        try:
+            self.assertEqual(
+                run([
+                    '-P', 'example', '-S', 'example/sol/ref_library_sort.cpp',
+                    '--input', 'fixtures/invalid_manual_input.in', '-q',
+                ]),
+                algo.USER_ERROR,
+            )
+        finally:
+            copied_file = 'example/.tmp/data/_manual/invalid_manual_input.in'
+            if os.path.exists(copied_file):
+                os.remove(copied_file)
+
     # == correctness detection =======================================================
 
     def test_wrong_solution_is_reported_as_wrong_answer(self):
@@ -125,6 +167,53 @@ class TestCall(unittest.TestCase):
         # run's own completion, so a wrong solution still exits successfully...
         self.assertEqual(return_code, algo.SUCCESSFULL_EXECUTION)
         # ...but the checker must have actually caught the wrong answer along the way.
+        self.assertIn('WA', stderr)
+
+    def test_runtime_error_is_reported(self):
+        return_code, stderr = run_capturing_stderr(
+            ['-P', 'example', '-S', 'fixtures/re_solution.cpp']
+        )
+        self.assertEqual(return_code, algo.SUCCESSFULL_EXECUTION)
+        self.assertIn('RE', stderr)
+
+    def test_timelimit_exceeded_is_reported(self):
+        # fixtures/judge_only_problem overrides time_limit_seconds down to 3s so this
+        # test doesn't have to wait out test/example's default 30s
+        return_code, stderr = run_capturing_stderr(
+            ['-P', 'fixtures/judge_only_problem', '-S', 'fixtures/tle_solution.cpp']
+        )
+        self.assertEqual(return_code, algo.SUCCESSFULL_EXECUTION)
+        self.assertIn('TLE', stderr)
+
+    # == checking mechanisms ==========================================================
+
+    def test_judge_mechanism_accepts_correct_solution(self):
+        # fixtures/judge_only_problem has a judge but no checker/referential solution,
+        # so determine_checking_mechanism() must resolve to Mechanism.judge
+        return_code, stderr = run_capturing_stderr(
+            ['-P', 'fixtures/judge_only_problem', '-S', 'example/sol/ref_library_sort.cpp']
+        )
+        self.assertEqual(return_code, algo.SUCCESSFULL_EXECUTION)
+        self.assertNotIn('WA', stderr)
+
+    def test_judge_mechanism_flags_wrong_solution(self):
+        return_code, stderr = run_capturing_stderr(
+            ['-P', 'fixtures/judge_only_problem', '-S', 'fixtures/wrong_solution.cpp']
+        )
+        self.assertEqual(return_code, algo.SUCCESSFULL_EXECUTION)
+        self.assertIn('WA', stderr)
+
+    def test_cross_check_mechanism_flags_wrong_solution(self):
+        # fixtures/cross_check_problem has a checker but no referential solution, so with
+        # two -S solutions determine_checking_mechanism() must resolve to cross_check;
+        # the correct solution must be listed first, since main() picks the first -S
+        # solution as the ad-hoc reference
+        return_code, stderr = run_capturing_stderr([
+            '-P', 'fixtures/cross_check_problem',
+            '-S', 'example/sol/ref_library_sort.cpp', 'fixtures/wrong_solution.cpp',
+        ])
+        self.assertEqual(return_code, algo.SUCCESSFULL_EXECUTION)
+        self.assertIn('Picked solution', stderr)
         self.assertIn('WA', stderr)
 
     # == return codes ================================================================

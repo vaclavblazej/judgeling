@@ -1,0 +1,3 @@
+name = "judge-only fixture"
+input = "same shape as test/example, but this fixture has a judge and no checker/referential solution"
+output = "elements of the array in a nondecreasing order"

@@ -1,0 +1,3 @@
+name = "broken checker fixture"
+input = "same shape as test/example, but this fixture's checker always signals bad invocation"
+output = "unused, the checker never inspects it"

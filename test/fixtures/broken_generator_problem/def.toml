@@ -1,0 +1,3 @@
+name = "broken generator fixture"
+input = "unused, this fixture's generator always fails before producing any testcase"
+output = "unused, this fixture's generator always fails before producing any testcase"
