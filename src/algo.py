@@ -34,7 +34,7 @@ QUIET_LEVEL = 60
 
 
 class AlgoException(Exception):
-    pass
+    """Raised for expected failure conditions the tool detects in its own logic (as opposed to subprocess errors)."""
 
 
 class VerboseLogger(logging.Logger):
@@ -49,7 +49,9 @@ logging.setLoggerClass(VerboseLogger)
 logger: VerboseLogger = cast(VerboseLogger, logging.getLogger("algo"))  # handlers/level configured in setup_logging()
 
 
-class AlgoArgumentParser(ArgumentParser):  # bad argument exit code override
+class AlgoArgumentParser(ArgumentParser):
+    """ArgumentParser that exits with INVALID_ARGUMENT instead of argparse's default exit code on a parse error."""
+
     def error(self, message):
         self.print_usage(stderr)
         self.exit(INVALID_ARGUMENT, f"{self.prog}: error: {message}\n")
@@ -387,6 +389,8 @@ def quote(to_print: object) -> str:
 
 
 class Program:
+    """A runnable source file: compiles it (if needed) and executes it with optional I/O redirection and a timeout."""
+
     def __init__(self, source_file: str):
         self.source_file = source_file
         self.name = bare_filename(source_file)
@@ -428,6 +432,8 @@ class Program:
 
 
 class Solution(Program):
+    """A user-submitted program under test: adds timing and a record of testcases it failed, plus disqualification."""
+
     def __init__(self, solution_file: str):
         super().__init__(solution_file)
         self.bad_testcases = []
@@ -436,6 +442,8 @@ class Solution(Program):
 
 
 class Generator(Program):
+    """A dataset generator: produces testcase input files into its own data folder, skipping runs via source-hash caching."""
+
     def __init__(self, generator_file: str):
         super().__init__(generator_file)
         self.data_folder = join(data_path, self.name)
@@ -458,6 +466,8 @@ class Generator(Program):
 
 
 class Testcase:
+    """A single generated input file within a dataset, along with the paths of its expected output and drawing."""
+
     def __init__(self, testcase_input_file: str, dataset: Dataset):
         self.input = testcase_input_file
         self.dataset = dataset
@@ -468,6 +478,8 @@ class Testcase:
 
 
 class Dataset:
+    """A named group of testcases produced by one generator, discovered by globbing its data folder."""
+
     def __init__(self, dataset_folder: str):
         self.name = basename(dataset_folder)
         self.data_folder = join(data_path, self.name)
@@ -484,6 +496,8 @@ class Dataset:
 
 
 class HashFile:
+    """Tracks a source file's content hash on disk so callers can detect whether it changed since the last run."""
+
     def __init__(self, hash_dir: str, src_file_location: str):
         self.hash_location = join(hash_dir, bare_filename(src_file_location) + ".hash")
         self.new_src_hash = hash_file(src_file_location)
@@ -499,6 +513,8 @@ class HashFile:
 
 
 class Timer:
+    """Measures a solution's CPU time across runs via RUSAGE_CHILDREN, tracking both total and worst-case time."""
+
     def __init__(self):
         self.total = 0.0
         self.max = 0.0
@@ -525,6 +541,8 @@ class Timer:
 
 
 class BadTestResult:
+    """Pairs a testcase with the non-OK Result a solution got on it, for summary reporting."""
+
     def __init__(self, testcase: Testcase, result: Result):
         self.testcase = testcase
         self.result = result
@@ -534,12 +552,16 @@ class BadTestResult:
 
 
 class Mechanism(enum.Enum):
+    """The way a problem checks solution output for correctness."""
+
     judge = "judge"  # it can decide whether the output is correct or not
     checker = "checker"  # have referential solution and the output will be compared
     cross_check = "cross_check"  # more user's solutions run against each other
 
 
 class Result(enum.Enum):
+    """Outcome of checking a solution's output on one testcase, with its numeric code and long/short display strings."""
+
     OK = (0, "OK", "OK")
     WRONG_ANSWER = (1, "WRONG ANSWER", "WA")
     PRESENTATION_ERROR = (2, "PRESENTATION ERROR", "PE")
