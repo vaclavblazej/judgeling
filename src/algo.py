@@ -36,6 +36,7 @@ QUIET_LEVEL = 60
 class AlgoException(Exception):
     pass
 
+
 class VerboseLogger(logging.Logger):
     """Logger with an extra VERBOSE level sitting between INFO and DEBUG."""
 
@@ -411,10 +412,9 @@ class Program:
         if timeout:
             logger.debug("Timeout: " + str(timeout))
         with (
-            open(input_file) if input_file else contextlib.nullcontext()
-        ) as in_file, (
-            open(output_file, "w") if output_file else contextlib.nullcontext()
-        ) as out_file:
+            open(input_file) if input_file else contextlib.nullcontext() as in_file,
+            open(output_file, "w") if output_file else contextlib.nullcontext() as out_file,
+        ):
             p = subprocess.Popen(command, stdin=in_file, stdout=out_file)
             try:
                 p.wait(timeout)
