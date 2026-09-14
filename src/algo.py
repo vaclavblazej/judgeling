@@ -39,7 +39,7 @@ class AlgoException(Exception):
 class VerboseLogger(logging.Logger):
     """Logger with an extra VERBOSE level sitting between INFO and DEBUG."""
 
-    def verbose(self, message, *args, **kws):
+    def verbose(self, message: object, *args: object, **kws: Any) -> None:
         if self.isEnabledFor(VERBOSE_LEVEL):
             self._log(VERBOSE_LEVEL, message, args, **kws)
 
@@ -108,7 +108,7 @@ version = "0.1.5"
 # == Main Logic ==================================================================
 
 
-def main():
+def main() -> int:
     setup_logging()
     conf.update(load_configuration(global_config_folder))
     conf.update(load_configuration(local_config_folder))
@@ -378,7 +378,7 @@ def main():
 # == Formatting ==================================================================
 
 
-def uv(to_print):
+def uv(to_print: object) -> str:
     return '"' + str(to_print) + '"'
 
 
@@ -390,10 +390,16 @@ class Program:
         self.source_file = source_file
         self.name = bare_filename(source_file)
 
-    def compile(self):
-        self.exe = compile_src(self.source_file, build_path)
+    def compile(self) -> None:
+        self.exe: list[str] = compile_src(self.source_file, build_path)
 
-    def run(self, args=None, input_file=None, output_file=None, timeout=None):
+    def run(
+        self,
+        args: list[str] | None = None,
+        input_file: str | None = None,
+        output_file: str | None = None,
+        timeout: float | None = None,
+    ) -> int:
         if args is None:
             args = []
         command = self.exe + args
@@ -430,11 +436,11 @@ class Solution(Program):
 
 
 class Generator(Program):
-    def __init__(self, generator_file):
+    def __init__(self, generator_file: str):
         super().__init__(generator_file)
         self.data_folder = join(data_path, self.name)
 
-    def generate(self):
+    def generate(self) -> int:
         os.makedirs(self.data_folder, exist_ok=True)
         self.compile()
         hash_src = HashFile(self.data_folder, self.source_file)
@@ -467,7 +473,7 @@ class Dataset:
         self.data_folder = join(data_path, self.name)
         self.testcases: list[Testcase] = []
 
-    def get_testcases(self, testcase_regex):
+    def get_testcases(self, testcase_regex: str | None) -> None:
         if testcase_regex is None:
             testcase_regex = "*"
         logger.verbose("Globbing " + self.data_folder)
@@ -488,7 +494,7 @@ class HashFile:
             return True
         return self.new_src_hash != self.old_src_hash
 
-    def save(self):
+    def save(self) -> None:
         save_content(self.hash_location, self.new_src_hash)
 
 
@@ -498,32 +504,32 @@ class Timer:
         self.max = 0.0
         self.start_time = 0.0
 
-    def start(self):
+    def start(self) -> None:
         run_info = self.get_info()
         self.start_time = run_info.ru_utime + run_info.ru_stime
 
-    def stop(self):
+    def stop(self) -> None:
         run_info = self.get_info()
         self.end_time = run_info.ru_utime + run_info.ru_stime
         self.total += self.end_time - self.start_time
         self.max = max(self.max, self.end_time - self.start_time)
 
-    def get_total(self):
+    def get_total(self) -> float:
         return self.total
 
-    def get_max(self):
+    def get_max(self) -> float:
         return self.max
 
-    def get_info(self):
+    def get_info(self) -> resource.struct_rusage:
         return resource.getrusage(resource.RUSAGE_CHILDREN)
 
 
 class BadTestResult:
-    def __init__(self, testcase, result):
+    def __init__(self, testcase: Testcase, result: Result):
         self.testcase = testcase
         self.result = result
 
-    def str(self):
+    def str(self) -> str:
         return "[" + self.testcase.dataset.name + "/" + self.testcase.name + " " + self.result.short_string + "]"
 
 
@@ -548,7 +554,7 @@ class Result(enum.Enum):
         self.long_string = long_string
 
     @staticmethod
-    def from_num(num: int):
+    def from_num(num: int) -> Result | None:
         for result in Result:
             if num == result.num:
                 return result
@@ -558,7 +564,7 @@ class Result(enum.Enum):
 # == Configuration ===============================================================
 
 
-def setup_logging():
+def setup_logging() -> None:
     logging.addLevelName(VERBOSE_LEVEL, "VERBOSE")
     handler = logging.StreamHandler()
     formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
@@ -566,7 +572,7 @@ def setup_logging():
     logger.addHandler(handler)
 
 
-def load_configuration(config_file_location):
+def load_configuration(config_file_location: str) -> dict[str, Any]:
     logger.verbose(f"load configuration {config_file_location}")
     try:
         with open(config_file_location) as config_file:
@@ -579,15 +585,15 @@ def load_configuration(config_file_location):
 # == File Manipulation ===========================================================
 
 
-def bare_filename(file_location):
+def bare_filename(file_location: str) -> str:
     return splitext(basename(file_location))[0]
 
 
-def file_extension(file_location):
+def file_extension(file_location: str) -> str:
     return splitext(basename(file_location))[1].lstrip(".")
 
 
-def get_file_or_folder(problem_folder, base_name, class_name=Program) -> list:
+def get_file_or_folder(problem_folder: str, base_name: str, class_name: type[Program] = Program) -> list[Program]:
     for ext in conf["extensions"]:
         base_file_path = join(problem_folder, base_name + ext)
         if exists(base_file_path):
@@ -608,7 +614,7 @@ def substitute(template: str, substitutions: dict[str, str]) -> str:
     return result
 
 
-def compile_src(src_file, build_path) -> list[str]:
+def compile_src(src_file: str, build_path: str) -> list[str]:
     extension = file_extension(src_file)
     interpreters = conf["languages"]["interpreted"]
     if extension in interpreters:
@@ -652,7 +658,7 @@ def compile_src(src_file, build_path) -> list[str]:
     return run_command
 
 
-def find_problem_folder(problem_query):
+def find_problem_folder(problem_query: str) -> str | None:
     logger.verbose("Problem id: " + uv(problem_query))
     # search in working directory
     location_path = realpath(join(working_directory, problem_query))
@@ -668,7 +674,7 @@ def find_problem_folder(problem_query):
     return None
 
 
-def print_file_contents(file_name, number_of_lines=20):
+def print_file_contents(file_name: str, number_of_lines: int = 20) -> None:
     if conf["logging_level"] >= QUIET_LEVEL:
         return
     with open(file_name, "r") as lines:
@@ -685,7 +691,7 @@ def print_file_contents(file_name, number_of_lines=20):
                 break
 
 
-def retrieve_content(file_location):
+def retrieve_content(file_location: str) -> str | None:
     try:
         with open(file_location, "r") as content_file:
             data = content_file.read()
@@ -695,12 +701,12 @@ def retrieve_content(file_location):
     return None
 
 
-def save_content(file_location, content):
+def save_content(file_location: str, content: str) -> None:
     with open(file_location, "w+") as content_file:
         content_file.write(content)
 
 
-def hash_file(file_location):
+def hash_file(file_location: str) -> str:
     BUF_SIZE = pow(2, 16)  # reads data in 64kb chunks
     sha1 = hashlib.sha1()
     with open(file_location, "rb") as content_file:
@@ -716,7 +722,12 @@ def hash_file(file_location):
 # == Core Script Logic Chunks ====================================================
 
 
-def determine_checking_mechanism(judge, checker, referential_solutions, solutions):
+def determine_checking_mechanism(
+    judge: list[Program],
+    checker: list[Program],
+    referential_solutions: list[Solution],
+    solutions: list[Solution],
+) -> Mechanism | None:
     if checker and len(checker) >= 1:
         if referential_solutions and len(referential_solutions) >= 1:
             return Mechanism.checker
@@ -727,7 +738,7 @@ def determine_checking_mechanism(judge, checker, referential_solutions, solution
     return None
 
 
-def validate_testcases(validators, datasets):
+def validate_testcases(validators: list[Program], datasets: list[Dataset]) -> bool:
     if validators:
         for validator in validators:
             validator.compile()
