@@ -119,8 +119,8 @@ def main() -> int:
         conf["logging_level"] = args.logging_level
     logger.setLevel(conf["logging_level"])
     logger.debug(f"Configuration: {conf}")
-    logger.debug(f"Script folder: {uv(script_path)}")
-    logger.debug(f"Working directory: {uv(working_directory)}")
+    logger.debug(f"Script folder: {quote(script_path)}")
+    logger.debug(f"Working directory: {quote(working_directory)}")
     logger.debug(f"Arguments: {argv}")
 
     if args.version:
@@ -137,11 +137,11 @@ def main() -> int:
 
     problem_folder = find_problem_folder(problem_query)
     if not problem_folder:
-        logger.error("Unable to locate the problem definition file for " + uv(problem_query))
+        logger.error("Unable to locate the problem definition file for " + quote(problem_query))
         return USER_ERROR
     problem_def_path = join(problem_folder, conf["def_file"])
     if not exists(problem_def_path):
-        logger.warning("Problem found locally, but is missing a definition file: " + uv(problem_folder))
+        logger.warning("Problem found locally, but is missing a definition file: " + quote(problem_folder))
 
     global data_path, build_path
     data_path = join(problem_folder, conf["problem_tmp_folder"], "data")
@@ -157,7 +157,7 @@ def main() -> int:
             if exists(solution_path):
                 solutions.append(Solution(solution_path))
             else:
-                logger.error("Supplied solution file does not exist: " + uv(solution_path))
+                logger.error("Supplied solution file does not exist: " + quote(solution_path))
                 return USER_ERROR
 
     if len(solutions) == 0:
@@ -207,7 +207,7 @@ def main() -> int:
         logger.critical("This is an issue with the problem definition, contact the author.")
         logger.critical('To fix this: create either a "judge" or "checker and referential solution"')
         return PROBLEM_ERROR
-    logger.verbose("The checking mechanism is: " + uv(mechanism.name))
+    logger.verbose("The checking mechanism is: " + quote(mechanism.name))
 
     random.seed()
     global seed
@@ -218,14 +218,14 @@ def main() -> int:
 
     manual_input_files = args.input
     if manual_input_files:
-        logger.verbose("Following inputs were supplied: " + uv(manual_input_files))
+        logger.verbose("Following inputs were supplied: " + quote(manual_input_files))
         manual_input_folder = join(data_path, conf["manual_testcases_folder_name"])
         os.makedirs(manual_input_folder, exist_ok=True)
         for manual_input_file in manual_input_files:
             if exists(manual_input_file):
                 shutil.copy(manual_input_file, join(manual_input_folder, basename(manual_input_file)))
             else:
-                logger.error("Supplied input file " + uv(manual_input_file) + " could not be found")
+                logger.error("Supplied input file " + quote(manual_input_file) + " could not be found")
         datasets = [Dataset(manual_input_folder)]
     else:
         if args.dataset_regex:
@@ -235,7 +235,7 @@ def main() -> int:
             if generator.generate() != 0:
                 logger.critical(
                     "Problem dataset generator "
-                    + uv(generator.name)
+                    + quote(generator.name)
                     + " has trouble running, contact the problem setter about this issue."
                 )
                 return PROBLEM_ERROR
@@ -258,7 +258,7 @@ def main() -> int:
         if mechanism == Mechanism.cross_check:
             referential_solutions = solutions[:1]
             solutions = solutions[1:]
-            logger.info("Picked solution " + uv(referential_solutions[0].name) + " as a referential solution")
+            logger.info("Picked solution " + quote(referential_solutions[0].name) + " as a referential solution")
         logger.info("Running referential solution to get referential outputs")
         for ref in referential_solutions:
             ref.compile()
@@ -267,7 +267,7 @@ def main() -> int:
         for dataset in datasets:
             logger.info("Dataset " + dataset.name)
             for testcase in dataset.testcases:
-                logger.info("Testcase: " + uv(testcase.name))
+                logger.info("Testcase: " + quote(testcase.name))
                 referential_solutions[0].run([], testcase.input, testcase.correct_output)
         solutions.extend(referential_solutions)
         logger.info("Referential outputs obtained succesfully")
@@ -283,7 +283,7 @@ def main() -> int:
             for testcase in list(itertools.chain(*[dataset.testcases for dataset in datasets])):
                 logger.info("Drawing testcase " + testcase.dataset.name + "/" + testcase.name)
                 if painter.run([testcase.drawing, testcase.input, testcase.correct_output], None, paint_outfile) != 0:
-                    logger.error("Unable to draw testcase " + uv(testcase.input) + ", interrupting drawing.")
+                    logger.error("Unable to draw testcase " + quote(testcase.input) + ", interrupting drawing.")
                     break
         else:
             logger.info("Available painter, add --draw flag to allow painter to draw testcases (can take a long time).")
@@ -298,7 +298,7 @@ def main() -> int:
             if len(viable_solutions) == 0:
                 logger.info("All solutions were disqualified, skipping rest of testcases for this dataset.")
                 break
-            logger.info("Testcase: " + uv(testcase.name))
+            logger.info("Testcase: " + quote(testcase.name))
             for solution in viable_solutions:
                 solution_out_dir = join(dataset.data_folder, "sol", solution.name)
                 os.makedirs(solution_out_dir, exist_ok=True)
@@ -312,7 +312,7 @@ def main() -> int:
                     )
                     solution.timer.stop()
                     if return_code != 0:
-                        logger.info("The program returned " + uv(return_code) + " (should return 0), and output >>>")
+                        logger.info("The program returned " + quote(return_code) + " (should return 0), and output >>>")
                         print_file_contents(solution_testcase_out)
                         logger.info("<<<")
                         result = Result.RUNTIME_ERROR
@@ -340,12 +340,12 @@ def main() -> int:
                 elif result == Result.BAD_INVOCATION:
                     logger.critical(
                         "The testing program returned a code for bad invocation. This means algo did not manage to run this program correctly. "
-                        + uv(mechanism)
+                        + quote(mechanism)
                         + " is probably writen incorrectly. If you think this is not the case, contact algo developers."
                     )
                     return PROBLEM_ERROR
                 else:
-                    logger.error(uv(mechanism.name) + " gave an invalid return code: " + str(result))
+                    logger.error(quote(mechanism.name) + " gave an invalid return code: " + str(result))
                     return PROBLEM_ERROR
                 if result != Result.OK:
                     # todo split results depending on retun code, and report correct error messages in summary
@@ -379,8 +379,8 @@ def main() -> int:
 # == Formatting ==================================================================
 
 
-def uv(to_print: object) -> str:
-    return '"' + str(to_print) + '"'
+def quote(to_print: object) -> str:
+    return "“" + str(to_print) + "”"
 
 
 # == Structure ===================================================================
@@ -404,7 +404,7 @@ class Program:
         if args is None:
             args = []
         command = self.exe + args
-        logger.debug("Running: " + uv(self.name) + ", arguments: " + str(command))
+        logger.debug("Running: " + quote(self.name) + ", arguments: " + str(command))
         if input_file:
             logger.debug("Input: " + input_file)
         if output_file:
@@ -445,9 +445,9 @@ class Generator(Program):
         self.compile()
         hash_src = HashFile(self.data_folder, self.source_file)
         if not args.force_generation and not hash_src.changed():
-            logger.verbose("Skipped generation of " + uv(self.name) + " due to non-changed source file.")
+            logger.verbose("Skipped generation of " + quote(self.name) + " due to non-changed source file.")
             return 0
-        logger.verbose("Removing old testcases of " + uv(self.name))
+        logger.verbose("Removing old testcases of " + quote(self.name))
         for filename in os.listdir(self.data_folder):
             file_location = join(self.data_folder, filename)
             if len(filename) > 3 and filename.endswith(conf["out_ext"]):
@@ -630,9 +630,9 @@ def compile_src(src_file: str, build_path: str) -> list[str]:
     if language is None:
         raise AlgoException(
             "Unknown source extension "
-            + uv(extension)
+            + quote(extension)
             + " for file "
-            + uv(src_file)
+            + quote(src_file)
             + ", and so algo does not know how to prepare it to be runnable."
         )
 
@@ -646,28 +646,28 @@ def compile_src(src_file: str, build_path: str) -> list[str]:
     os.makedirs(build_path, exist_ok=True)
     hash_src = HashFile(build_path, src_file)
     if not hash_src.changed() and exists(artifact):
-        logger.verbose("Skipped compilation of " + uv(basename(src_file)) + " due to non-changed source file.")
+        logger.verbose("Skipped compilation of " + quote(basename(src_file)) + " due to non-changed source file.")
         return run_command
-    logger.info("Compiling: " + uv(basename(src_file)))
-    logger.verbose("Compile destination: " + uv(artifact))
+    logger.info("Compiling: " + quote(basename(src_file)))
+    logger.verbose("Compile destination: " + quote(artifact))
     res = subprocess.run(compilation, check=False)
     if res.returncode != 0:
-        raise AlgoException(f"Unable to compile source code: {uv(src_file)}")
+        raise AlgoException(f"Unable to compile source code: {quote(src_file)}")
     logger.verbose("Compilation return code: " + str(res.returncode))
     hash_src.save()
     return run_command
 
 
 def find_problem_folder(problem_query: str) -> str | None:
-    logger.verbose("Problem id: " + uv(problem_query))
+    logger.verbose("Problem id: " + quote(problem_query))
     # search in working directory
     location_path = realpath(join(working_directory, problem_query))
     if exists(location_path):
-        logger.debug("Problem found locally in " + uv(location_path))
+        logger.debug("Problem found locally in " + quote(location_path))
         return location_path
     # search in default problem repository location
     repository_path_regex = join(problem_search_location, "**", problem_query, conf["def_file"])
-    logger.debug("Repository path regex: " + uv(repository_path_regex))
+    logger.debug("Repository path regex: " + quote(repository_path_regex))
     for def_file in glob(repository_path_regex, recursive=True):
         # todo if found more than one problem definition, raise a warning
         return dirname(def_file)
@@ -715,7 +715,7 @@ def hash_file(file_location: str) -> str:
             if not data:
                 break
             sha1.update(data)
-    logger.debug("Hashed " + uv(file_location) + " into " + uv(sha1.hexdigest()))
+    logger.debug("Hashed " + quote(file_location) + " into " + quote(sha1.hexdigest()))
     return sha1.hexdigest()
 
 
@@ -750,9 +750,9 @@ def validate_testcases(validators: list[Program], datasets: list[Dataset]) -> bo
                         if validator.run([], testcase.input) != 0:
                             logger.error(
                                 "Testcase "
-                                + uv(dataset.name + "/" + testcase.name)
+                                + quote(dataset.name + "/" + testcase.name)
                                 + " is INVALID, according to validator "
-                                + uv(validator.name)
+                                + quote(validator.name)
                             )
                             return False
         logger.info("All testcases were validated successfully")
