@@ -1,4 +1,6 @@
-# Tools to manage algorithm definitions, problem definitions, and their solutions
+# judgeling
+
+Tools to manage algorithm definitions, problem definitions, and their solutions.
 
 It is NOT designed to
 * search for user's solutions
@@ -13,11 +15,19 @@ First, download this repository by running.
 $ git clone https://gitlab.fit.cvut.cz/acm/acm-algo.git
 ```
 
-Now, you can add a symbolic link to `./algo.sh` to your path, e.g. `~/bin`, so that you can run this script from any location.
+Then install it with `uv`, which exposes a `judgeling` command on your path (via `[project.scripts]` in `pyproject.toml`):
 
 ```bash
-$ ln -s "$PWD/acm-algo/algo.py" ~/bin/algo
+$ uv tool install .
 ```
+
+Alternatively, you can add a symbolic link to `src/judgeling.py` to your path, e.g. `~/bin`, so that you can run this script from any location.
+
+```bash
+$ ln -s "$PWD/src/judgeling.py" ~/bin/judgeling
+```
+
+> Note: this tool used to be called `algo`. Short aliases (e.g. keeping `algo` as an alias for `judgeling`) are not set up yet and will be handled separately.
 
 Also, to be able to use common problem definitions, download the problem repository.
 
@@ -30,7 +40,7 @@ $ git clone https://gitlab.fit.cvut.cz/acm/acm-problems.git
 To test your code run:
 
 ```bash
-$ algo -P PROBLEM_ID -S [SOLUTION.cpp ...]
+$ judgeling -P PROBLEM_ID -S [SOLUTION.cpp ...]
 ```
 
 The `PROBLEM_ID` either represents path to local problem definition, or a problem name from `acm-problems` repository (e.g. *sort*).
@@ -38,7 +48,7 @@ The `PROBLEM_ID` either represents path to local problem definition, or a proble
 The script will compile your code and run it against respective datasets.
 
 ```bash
-$ algo -P sort -S default_library_sort.cpp radix_sort.cpp
+$ judgeling -P sort -S default_library_sort.cpp radix_sort.cpp
 Generating .................................................. done
 2019-11-02 19:38:36,070 - INFO - Testing validity of testcases
 2019-11-02 19:38:36,430 - INFO - All testcases were validated successfully
@@ -65,7 +75,7 @@ You will see which of the testcases were failed and possibly some additional inf
 To test against specific datasets or testcases using dataset regex `-D` and testcase regex `-T` arguments.
 
 ```bash
-$ algo -P sort -S default_library_sort.cpp radix_sort.cpp -T 007
+$ judgeling -P sort -S default_library_sort.cpp radix_sort.cpp -T 007
 Generating .................................................. done
 2019-11-02 19:42:55,168 - INFO - Testing validity of testcases
 2019-11-02 19:42:55,170 - INFO - All testcases were validated successfully
@@ -87,11 +97,11 @@ Delete it if you think some old files there cause weird issues.
 You may test your program in several various ways depending on how much you entangle your solution to the problem.
 
 1. Basic level - load input, solve, print output; measures: total speed
-2. (to be implemented) Measurement tools - you make few additional calls to the algo library; measures: speed of various algorithm parts, algorithm code complexity.
+2. (to be implemented) Measurement tools - you make few additional calls to the judgeling library; measures: speed of various algorithm parts, algorithm code complexity.
 
 #### Changing solution to allow more precise measurements (to be implemented)
 
-Keep your code compilable with standard commands using `#ifdef ALGME`
+Keep your code compilable with standard commands using `#ifdef JUDGELING`
 
 ### Problem definition structure
 The folder/file structure in problems folder represents the primary categorization of each problem. The problem definition with its input/output definition to solve it

@@ -2,7 +2,7 @@
 using namespace std;
 typedef long long ll;
 
-// Deliberately does not sort; used to verify algo detects wrong answers.
+// Deliberately does not sort; used to verify judgeling detects wrong answers.
 int main(){
     ll N;cin>>N;
     vector<ll> a(N);

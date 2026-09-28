@@ -2,7 +2,7 @@
 using namespace std;
 typedef long long ll;
 
-// Deliberately exits with a nonzero return code; used to verify algo detects runtime errors.
+// Deliberately exits with a nonzero return code; used to verify judgeling detects runtime errors.
 int main(){
     ll N;cin>>N;
     return 1;

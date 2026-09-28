@@ -33,7 +33,7 @@ VERBOSE_LEVEL = 15
 QUIET_LEVEL = 60
 
 
-class AlgoException(Exception):
+class JudgelingException(Exception):
     """Raised for expected failure conditions the tool detects in its own logic (as opposed to subprocess errors)."""
 
 
@@ -46,10 +46,12 @@ class VerboseLogger(logging.Logger):
 
 
 logging.setLoggerClass(VerboseLogger)
-logger: VerboseLogger = cast(VerboseLogger, logging.getLogger("algo"))  # handlers/level configured in setup_logging()
+logger: VerboseLogger = cast(
+    VerboseLogger, logging.getLogger("judgeling")
+)  # handlers/level configured in setup_logging()
 
 
-class AlgoArgumentParser(ArgumentParser):
+class JudgelingArgumentParser(ArgumentParser):
     """ArgumentParser that exits with INVALID_ARGUMENT instead of argparse's default exit code on a parse error."""
 
     def error(self, message):
@@ -57,7 +59,7 @@ class AlgoArgumentParser(ArgumentParser):
         self.exit(INVALID_ARGUMENT, f"{self.prog}: error: {message}\n")
 
 
-parser = AlgoArgumentParser(
+parser = JudgelingArgumentParser(
     description="Test algorithm implementations on problem definitions",
     epilog="Confront documentation of this script for examples and usage of various concepts.",
 )
@@ -101,7 +103,7 @@ conf: dict[str, Any] = {
     "logging_level": logging.INFO,
 }  # logging is set up before config loads
 script_path = dirname(realpath(__file__))
-project_root = dirname(script_path)  # repo root; algo.py lives in src/
+project_root = dirname(script_path)  # repo root; judgeling.py lives in src/
 working_directory = os.getcwd()
 global_config_folder = join(project_root, "config.json")
 local_config_folder = join(project_root, "config_local.json")
@@ -126,7 +128,7 @@ def main() -> int:
     logger.debug(f"Arguments: {argv}")
 
     if args.version:
-        print("algo version " + version)
+        print("judgeling version " + version)
         return SUCCESSFULL_EXECUTION
 
     problem_query = args.problem_query
@@ -172,7 +174,7 @@ def main() -> int:
     for solution in solutions:
         solution.compile()
 
-    project_config_folder = join(problem_folder, ".algo_config.json")
+    project_config_folder = join(problem_folder, ".judgeling_config.json")
     conf.update(load_configuration(project_config_folder))
 
     file_structure = conf["file_structure"]
@@ -341,9 +343,9 @@ def main() -> int:
                     logger.error(solution.name + " " + result.short_string)
                 elif result == Result.BAD_INVOCATION:
                     logger.critical(
-                        "The testing program returned a code for bad invocation. This means algo did not manage to run this program correctly. "
+                        "The testing program returned a code for bad invocation. This means judgeling did not manage to run this program correctly. "
                         + quote(mechanism)
-                        + " is probably writen incorrectly. If you think this is not the case, contact algo developers."
+                        + " is probably writen incorrectly. If you think this is not the case, contact judgeling developers."
                     )
                     return PROBLEM_ERROR
                 else:
@@ -650,17 +652,23 @@ def compile_src(src_file: str, build_path: str) -> list[str]:
             language = candidate
             break
     if language is None:
-        raise AlgoException(
+        raise JudgelingException(
             "Unknown source extension "
             + quote(extension)
             + " for file "
             + quote(src_file)
-            + ", and so algo does not know how to prepare it to be runnable."
+            + ", and so judgeling does not know how to prepare it to be runnable."
         )
 
     # "run" and "artifact" let a language compile to something other than a single
     # directly-executable binary (e.g. Java's javac produces a .class run via `java -cp`).
-    substitutions = {"flag": "ALGME", "exe": exe_file, "source": src_file, "build": build_path, "class": base_src_name}
+    substitutions = {
+        "flag": "JUDGELING",
+        "exe": exe_file,
+        "source": src_file,
+        "build": build_path,
+        "class": base_src_name,
+    }
     compilation = shlex.split(substitute(language["command"], substitutions))
     run_command = shlex.split(substitute(language["run"], substitutions)) if "run" in language else [exe_file]
     artifact = substitute(language.get("artifact", "{exe}"), substitutions)
@@ -674,7 +682,7 @@ def compile_src(src_file: str, build_path: str) -> list[str]:
     logger.verbose("Compile destination: " + quote(artifact))
     res = subprocess.run(compilation, check=False)
     if res.returncode != 0:
-        raise AlgoException(f"Unable to compile source code: {quote(src_file)}")
+        raise JudgelingException(f"Unable to compile source code: {quote(src_file)}")
     logger.verbose("Compilation return code: " + str(res.returncode))
     hash_src.save()
     return run_command
