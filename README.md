@@ -1,18 +1,13 @@
-# judgeling
+# Judgeling
 
-Tools to manage algorithm definitions, problem definitions, and their solutions.
-
-It is NOT designed to
-* search for user's solutions
-* create problem defintion scaffolding
-* todo ...
+Minimalistic tool to manage problem packages for competitive programming.
 
 ## Setup
 
 First, download this repository by running.
 
 ```bash
-$ git clone https://gitlab.fit.cvut.cz/acm/acm-algo.git
+$ git clone git@github.com:vaclavblazej/judgeling.git
 ```
 
 Then install it with `uv`, which exposes a `judgeling` command on your path (via `[project.scripts]` in `pyproject.toml`):
@@ -25,14 +20,6 @@ Alternatively, you can add a symbolic link to `src/judgeling.py` to your path, e
 
 ```bash
 $ ln -s "$PWD/src/judgeling.py" ~/bin/judgeling
-```
-
-> Note: this tool used to be called `algo`. Short aliases (e.g. keeping `algo` as an alias for `judgeling`) are not set up yet and will be handled separately.
-
-Also, to be able to use common problem definitions, download the problem repository.
-
-```bash
-$ git clone https://gitlab.fit.cvut.cz/acm/acm-problems.git
 ```
 
 ## Basic usage
@@ -49,6 +36,8 @@ The script will compile your code and run it against respective datasets.
 
 ```bash
 $ judgeling -P sort -S default_library_sort.cpp radix_sort.cpp
+```
+```
 Generating .................................................. done
 2019-11-02 19:38:36,070 - INFO - Testing validity of testcases
 2019-11-02 19:38:36,430 - INFO - All testcases were validated successfully
@@ -76,6 +65,8 @@ To test against specific datasets or testcases using dataset regex `-D` and test
 
 ```bash
 $ judgeling -P sort -S default_library_sort.cpp radix_sort.cpp -T 007
+```
+```
 Generating .................................................. done
 2019-11-02 19:42:55,168 - INFO - Testing validity of testcases
 2019-11-02 19:42:55,170 - INFO - All testcases were validated successfully
@@ -104,12 +95,13 @@ You may test your program in several various ways depending on how much you enta
 Keep your code compilable with standard commands using `#ifdef JUDGELING`
 
 ### Problem definition structure
+
 The folder/file structure in problems folder represents the primary categorization of each problem. The problem definition with its input/output definition to solve it
 
 * problem - contains the problem statement and input/output definitions
 * validator - checks whether the input is correct (mainly for custom made input)
 * painter - gets input and should create the picture
-* corectness check
+* correctness check
     * checker - compares your solution with the referential solution (requires solution)
     * judge - is given your solution and input and decides if it is correct, generally faster to run
 * generator - creates testing datasets and their testcases, dataset name corresponds to the generator name
@@ -132,6 +124,7 @@ The folder/file structure in problems folder represents the primary categorizati
 Each part can be either a cpp/py/sh file directly, or a directory containing several of such files.
 
 #### Solution
+
 ```bash
 my_sol time_result_file < testcase_input > solution_testcase_output
 ```
@@ -161,6 +154,7 @@ jud testcase_input solution_testcase_output
 ```
 
 #### Checker (chk)
+
 ```bash
 chk testcase_correct_output solution_testcase_output
 ```

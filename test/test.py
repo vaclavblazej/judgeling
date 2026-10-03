@@ -74,13 +74,24 @@ class TestCall(unittest.TestCase):
 
     def test_return_codes_are_zero_correct_problem_with_solution(self):
         self.assertEqual(
-            run(["-P", "example", "-S", "example/sol/ref_library_sort.cpp", "-q"]), judgeling.SUCCESSFULL_EXECUTION
+            run(["-P", "example", "-S", "example/sol/ref_library_sort.cpp", "-q"]),
+            judgeling.SUCCESSFULL_EXECUTION,
         )
 
     def test_return_codes_are_zero_with_testcase_filter(self):
         # narrows the run down to a single testcase, exercising the -T regex path
         self.assertEqual(
-            run(["-P", "example", "-S", "example/sol/ref_library_sort.cpp", "-T", "001", "-q"]),
+            run(
+                [
+                    "-P",
+                    "example",
+                    "-S",
+                    "example/sol/ref_library_sort.cpp",
+                    "-T",
+                    "001",
+                    "-q",
+                ]
+            ),
             judgeling.SUCCESSFULL_EXECUTION,
         )
 
@@ -127,7 +138,8 @@ class TestCall(unittest.TestCase):
     def test_second_run_skips_compilation_due_to_cache(self):
         # first run populates the source-hash cache
         self.assertEqual(
-            run(["-P", "example", "-S", "example/sol/ref_library_sort.cpp", "-q"]), judgeling.SUCCESSFULL_EXECUTION
+            run(["-P", "example", "-S", "example/sol/ref_library_sort.cpp", "-q"]),
+            judgeling.SUCCESSFULL_EXECUTION,
         )
         return_code, stderr = run_capturing_stderr(["-P", "example", "-S", "example/sol/ref_library_sort.cpp", "-v"])
         self.assertEqual(return_code, judgeling.SUCCESSFULL_EXECUTION)
@@ -140,12 +152,23 @@ class TestCall(unittest.TestCase):
         self.assertEqual(run(["-P", "non_existant"]), judgeling.USER_ERROR)
 
     def test_bad_argument_return_code_nonexistent_solution_file(self):
-        self.assertEqual(run(["-P", "example", "-S", "example/sol/does_not_exist.cpp"]), judgeling.USER_ERROR)
+        self.assertEqual(
+            run(["-P", "example", "-S", "example/sol/does_not_exist.cpp"]),
+            judgeling.USER_ERROR,
+        )
 
     def test_problem_error_when_no_checking_mechanism(self):
         # a problem with no generator/judge/checker/referential solution can't be checked at all
         self.assertEqual(
-            run(["-P", "fixtures/no_checker_problem", "-S", "fixtures/wrong_solution.cpp", "-q"]),
+            run(
+                [
+                    "-P",
+                    "fixtures/no_checker_problem",
+                    "-S",
+                    "fixtures/wrong_solution.cpp",
+                    "-q",
+                ]
+            ),
             judgeling.PROBLEM_ERROR,
         )
 
@@ -153,14 +176,30 @@ class TestCall(unittest.TestCase):
         # a checker that always signals bad invocation (return code 43) must not be
         # mistaken for a valid WA/PE/RE/TLE result
         self.assertEqual(
-            run(["-P", "fixtures/broken_checker_problem", "-S", "example/sol/ref_library_sort.cpp", "-q"]),
+            run(
+                [
+                    "-P",
+                    "fixtures/broken_checker_problem",
+                    "-S",
+                    "example/sol/ref_library_sort.cpp",
+                    "-q",
+                ]
+            ),
             judgeling.PROBLEM_ERROR,
         )
 
     def test_generator_failure_is_problem_error(self):
         # a generator that exits nonzero must not be treated as producing an empty dataset
         self.assertEqual(
-            run(["-P", "fixtures/broken_generator_problem", "-S", "fixtures/wrong_solution.cpp", "-q"]),
+            run(
+                [
+                    "-P",
+                    "fixtures/broken_generator_problem",
+                    "-S",
+                    "fixtures/wrong_solution.cpp",
+                    "-q",
+                ]
+            ),
             judgeling.PROBLEM_ERROR,
         )
 
@@ -206,9 +245,7 @@ class TestCall(unittest.TestCase):
     def test_timelimit_exceeded_is_reported(self):
         # fixtures/judge_only_problem overrides time_limit_seconds down to 3s so this
         # test doesn't have to wait out test/example's default 30s
-        return_code, stderr = run_capturing_stderr(
-            ["-P", "fixtures/judge_only_problem", "-S", "fixtures/tle_solution.cpp"]
-        )
+        return_code, stderr = run_capturing_stderr(["-P", "fixtures/judge_only_problem", "-S", "fixtures/tle_solution.cpp"])
         self.assertEqual(return_code, judgeling.SUCCESSFULL_EXECUTION)
         self.assertIn("TLE", stderr)
 
@@ -218,15 +255,18 @@ class TestCall(unittest.TestCase):
         # fixtures/judge_only_problem has a judge but no checker/referential solution,
         # so determine_checking_mechanism() must resolve to Mechanism.judge
         return_code, stderr = run_capturing_stderr(
-            ["-P", "fixtures/judge_only_problem", "-S", "example/sol/ref_library_sort.cpp"]
+            [
+                "-P",
+                "fixtures/judge_only_problem",
+                "-S",
+                "example/sol/ref_library_sort.cpp",
+            ]
         )
         self.assertEqual(return_code, judgeling.SUCCESSFULL_EXECUTION)
         self.assertNotIn("WA", stderr)
 
     def test_judge_mechanism_flags_wrong_solution(self):
-        return_code, stderr = run_capturing_stderr(
-            ["-P", "fixtures/judge_only_problem", "-S", "fixtures/wrong_solution.cpp"]
-        )
+        return_code, stderr = run_capturing_stderr(["-P", "fixtures/judge_only_problem", "-S", "fixtures/wrong_solution.cpp"])
         self.assertEqual(return_code, judgeling.SUCCESSFULL_EXECUTION)
         self.assertIn("WA", stderr)
 

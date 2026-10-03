@@ -1,22 +1,23 @@
 #!/usr/bin/env python3
 # Keep this program in a single file with at most 1000 lines for the sake of simplicity.
 
-# This script provides a testing interface for solutions to problems which are defined in standard format.
+# Minimalistic tool to manage problem packages for competitive programming.
 
 import contextlib
 import enum
 import hashlib
+import importlib.metadata
 import itertools
 import json
 import logging
 import os
-import random
 
 # unix specific, for measuring time, see https://stackoverflow.com/questions/16701310/get-how-much-time-python-subprocess-spends/16701365
 import resource
 import shlex
 import shutil
 import subprocess
+import tomllib
 from argparse import ArgumentParser
 from glob import glob
 from os.path import basename, dirname, exists, join, realpath, splitext
@@ -46,9 +47,7 @@ class VerboseLogger(logging.Logger):
 
 
 logging.setLoggerClass(VerboseLogger)
-logger: VerboseLogger = cast(
-    VerboseLogger, logging.getLogger("judgeling")
-)  # handlers/level configured in setup_logging()
+logger: VerboseLogger = cast(VerboseLogger, logging.getLogger("judgeling"))  # handlers/level configured in setup_logging()
 
 
 class JudgelingArgumentParser(ArgumentParser):
@@ -66,38 +65,16 @@ parser = JudgelingArgumentParser(
 # help as '-h' and '--help' is added by default
 parser.add_argument("-V", "--version", dest="version", action="store_true", help="print out the version")
 parser.add_argument("-P", "--problem", dest="problem_query", help="problem definition to be run")
-parser.add_argument(
-    "-S", "--solution", dest="solution", nargs="+", help="user's files with his own solutions to the problem"
-)
+parser.add_argument("-S", "--solution", dest="solution", nargs="+", help="user's files with his own solutions to the problem")
 parser.add_argument("-D", "--dataset", dest="dataset_regex", help="filter used datasets using regex")
 parser.add_argument("-T", "--testcase", dest="testcase_regex", help="filter used testcases using regex")
 parser.add_argument("--seed", dest="seed", help="provide a rng seed for dataset generators")
-parser.add_argument(
-    "--draw", dest="draw", action="store_true", help="create drawings of testcases using the pic program"
-)
+parser.add_argument("--draw", dest="draw", action="store_true", help="create drawings of testcases using the pic program")
 parser.add_argument("--input", dest="input", nargs="+", help="supply input data files manually")
-parser.add_argument(
-    "-g", "--force-gen", dest="force_generation", action="store_true", help="force the data generators to run again"
-)
-parser.add_argument(
-    "-q", "--quiet", dest="logging_level", const=QUIET_LEVEL, action="store_const", help="no output will be shown"
-)
-parser.add_argument(
-    "-v",
-    "--verbose",
-    dest="logging_level",
-    const=VERBOSE_LEVEL,
-    action="store_const",
-    help="more detailed info about testing",
-)
-parser.add_argument(
-    "-d",
-    "--debug",
-    dest="logging_level",
-    const=logging.DEBUG,
-    action="store_const",
-    help="very detailed messages of script's inner workings",
-)
+parser.add_argument("-g", "--force-gen", dest="force_generation", action="store_true", help="force the data generators to run again")
+parser.add_argument("-q", "--quiet", dest="logging_level", const=QUIET_LEVEL, action="store_const", help="no logging will be shown")
+parser.add_argument("-v", "--verbose", dest="logging_level", const=VERBOSE_LEVEL, action="store_const", help="more detailed info about testing")
+parser.add_argument("-d", "--debug", dest="logging_level", const=logging.DEBUG, action="store_const", help="very detailed logging of script's inner workings")
 
 conf: dict[str, Any] = {
     "logging_level": logging.INFO,
@@ -108,7 +85,6 @@ working_directory = os.getcwd()
 global_config_folder = join(project_root, "config.json")
 local_config_folder = join(project_root, "config_local.json")
 problem_search_location = realpath(join(project_root, "..", "acm-problems/problems"))
-version = "0.1.5"
 
 # == Main Logic ==================================================================
 
@@ -128,13 +104,13 @@ def main() -> int:
     logger.debug(f"Arguments: {argv}")
 
     if args.version:
-        print("judgeling version " + version)
+        print("judgeling version " + get_version())
         return SUCCESSFULL_EXECUTION
 
     problem_query = args.problem_query
     # default problem folder is the current working directory (default help command would have to be disabled)
-    # if problem_query is None and exists(join(working_directory, conf['def_file'])):
-    #     problem_query = working_directory
+    if problem_query is None and exists(join(working_directory, conf["def_file"])):
+        problem_query = working_directory
     if problem_query is None:
         logger.error("Problem ID was not supplied! Add -P <problem location/id> argument.")
         return SUCCESSFULL_EXECUTION
@@ -154,17 +130,19 @@ def main() -> int:
     logger.debug("DATA PATH: " + data_path)
     logger.debug("BUILD PATH: " + build_path)
 
-    solutions = []
-    if args.solution:
-        for arg_sol in args.solution:
-            solution_path = join(working_directory, arg_sol)
-            if exists(solution_path):
-                solutions.append(Solution(solution_path))
-            else:
-                logger.error("Supplied solution file does not exist: " + quote(solution_path))
-                return USER_ERROR
+    project_config_folder = join(problem_folder, ".judgeling_config.json")
+    conf.update(load_configuration(project_config_folder))
 
-    if len(solutions) == 0:
+    solutions = []
+    for arg_sol in args.solution or []:
+        solution_path = join(working_directory, arg_sol)
+        if exists(solution_path):
+            solutions.append(Solution(solution_path))
+        else:
+            logger.error("Supplied solution file does not exist: " + quote(solution_path))
+            return USER_ERROR
+
+    if not solutions:
         if exists(problem_def_path):
             logger.verbose("Problem information contained in: " + problem_def_path)
             print_file_contents(problem_def_path)
@@ -174,20 +152,12 @@ def main() -> int:
     for solution in solutions:
         solution.compile()
 
-    project_config_folder = join(problem_folder, ".judgeling_config.json")
-    conf.update(load_configuration(project_config_folder))
-
     file_structure = conf["file_structure"]
-    generator_files = get_file_or_folder(problem_folder, file_structure["generator"])
-    generators = [Generator(g.source_file) for g in generator_files] if generator_files else []
+    generators = get_file_or_folder(problem_folder, file_structure["generator"], Generator)
     validators = get_file_or_folder(problem_folder, file_structure["validator"])
     painters = get_file_or_folder(problem_folder, file_structure["painter"])
     judges = get_file_or_folder(problem_folder, file_structure["judge"])
-    raw_ref_solutions = get_file_or_folder(problem_folder, file_structure["solution"])
-    if raw_ref_solutions:
-        referential_solutions = [Solution(x.source_file) for x in raw_ref_solutions]
-    else:
-        referential_solutions = []
+    referential_solutions = get_file_or_folder(problem_folder, file_structure["solution"], Solution)
     # compares one solution against referential solution if it is correct
     checkers = get_file_or_folder(problem_folder, file_structure["checker"])
 
@@ -213,7 +183,6 @@ def main() -> int:
         return PROBLEM_ERROR
     logger.verbose("The checking mechanism is: " + quote(mechanism.name))
 
-    random.seed()
     global seed
     seed = 0
     if args.seed:
@@ -227,7 +196,10 @@ def main() -> int:
         os.makedirs(manual_input_folder, exist_ok=True)
         for manual_input_file in manual_input_files:
             if exists(manual_input_file):
-                shutil.copy(manual_input_file, join(manual_input_folder, basename(manual_input_file)))
+                shutil.copy(
+                    manual_input_file,
+                    join(manual_input_folder, basename(manual_input_file)),
+                )
             else:
                 logger.error("Supplied input file " + quote(manual_input_file) + " could not be found")
         datasets = [Dataset(manual_input_folder)]
@@ -237,11 +209,7 @@ def main() -> int:
         for generator in generators:
             logger.debug("Generator output folder: " + generator.data_folder)
             if generator.generate() != 0:
-                logger.critical(
-                    "Problem dataset generator "
-                    + quote(generator.name)
-                    + " has trouble running, contact the problem setter about this issue."
-                )
+                logger.critical("Problem dataset generator " + quote(generator.name) + " has trouble running, contact the problem setter about this issue.")
                 return PROBLEM_ERROR
 
         datasets = [Dataset(g.data_folder) for g in generators]
@@ -286,7 +254,14 @@ def main() -> int:
                 paint_outfile = None
             for testcase in list(itertools.chain(*[dataset.testcases for dataset in datasets])):
                 logger.info("Drawing testcase " + testcase.dataset.name + "/" + testcase.name)
-                if painter.run([testcase.drawing, testcase.input, testcase.correct_output], None, paint_outfile) != 0:
+                if (
+                    painter.run(
+                        [testcase.drawing, testcase.input, testcase.correct_output],
+                        None,
+                        paint_outfile,
+                    )
+                    != 0
+                ):
                     logger.error("Unable to draw testcase " + quote(testcase.input) + ", interrupting drawing.")
                     break
         else:
@@ -312,7 +287,10 @@ def main() -> int:
                 try:
                     solution.timer.start()
                     return_code = solution.run(
-                        [time_result_file], testcase.input, solution_testcase_out, conf["time_limit_seconds"]
+                        [time_result_file],
+                        testcase.input,
+                        solution_testcase_out,
+                        conf["time_limit_seconds"],
                     )
                     solution.timer.stop()
                     if return_code != 0:
@@ -342,11 +320,7 @@ def main() -> int:
                 ]:
                     logger.error(solution.name + " " + result.short_string)
                 elif result == Result.BAD_INVOCATION:
-                    logger.critical(
-                        "The testing program returned a code for bad invocation. This means judgeling did not manage to run this program correctly. "
-                        + quote(mechanism)
-                        + " is probably writen incorrectly. If you think this is not the case, contact judgeling developers."
-                    )
+                    logger.critical("The testing program returned a code for bad invocation. This means judgeling did not manage to run this program correctly. " + quote(mechanism) + " is probably writen incorrectly. If you think this is not the case, contact judgeling developers.")
                     return PROBLEM_ERROR
                 else:
                     logger.error(quote(mechanism.name) + " gave an invalid return code: " + str(result))
@@ -368,23 +342,32 @@ def main() -> int:
             res_string = "Errors in " + (" ".join([x.str() for x in solution.bad_testcases]))
         else:
             res_string = "OK"
-        logger.info(
-            solution.name
-            + " (time "
-            + str(round(solution.timer.get_total(), 3))
-            + "s, max "
-            + str(round(solution.timer.get_max(), 3))
-            + "s): "
-            + res_string
-        )
+        logger.info(solution.name + " (time " + str(round(solution.timer.get_total(), 3)) + "s, max " + str(round(solution.timer.get_max(), 3)) + "s): " + res_string)
     return SUCCESSFULL_EXECUTION
+
+
+def get_version() -> str:
+    try:
+        version = importlib.metadata.version("judgeling")  # installed
+    except importlib.metadata.PackageNotFoundError:
+        # not installed
+        try:
+            with open(join(project_root, "pyproject.toml"), "rb") as pyproject_file:  # read from repo
+                version = tomllib.load(pyproject_file)["project"]["version"]
+        except OSError, tomllib.TOMLDecodeError, KeyError:
+            version = "unknown"
+    try:
+        source_hash = hash_file(realpath(__file__))[:8]  # ties the version to the exact running source
+    except OSError:
+        source_hash = "unknown"
+    return version + "+" + source_hash
 
 
 # == Formatting ==================================================================
 
 
 def quote(to_print: object) -> str:
-    return "“" + str(to_print) + "”"
+    return "“" + str(to_print) + "”"  # requires UTF-8
 
 
 # == Structure ===================================================================
@@ -557,7 +540,7 @@ class Mechanism(enum.Enum):
     """The way a problem checks solution output for correctness."""
 
     judge = "judge"  # it can decide whether the output is correct or not
-    checker = "checker"  # have referential solution and the output will be compared
+    checker = "checker"  # have referential solution and the solutions will be compared to it
     cross_check = "cross_check"  # more user's solutions run against each other
 
 
@@ -617,7 +600,7 @@ def file_extension(file_location: str) -> str:
     return splitext(basename(file_location))[1].lstrip(".")
 
 
-def get_file_or_folder(problem_folder: str, base_name: str, class_name: type[Program] = Program) -> list[Program]:
+def get_file_or_folder[T: Program](problem_folder: str, base_name: str, class_name: type[T] = Program) -> list[T]:
     for ext in conf["extensions"]:
         base_file_path = join(problem_folder, base_name + ext)
         if exists(base_file_path):
@@ -652,13 +635,7 @@ def compile_src(src_file: str, build_path: str) -> list[str]:
             language = candidate
             break
     if language is None:
-        raise JudgelingException(
-            "Unknown source extension "
-            + quote(extension)
-            + " for file "
-            + quote(src_file)
-            + ", and so judgeling does not know how to prepare it to be runnable."
-        )
+        raise JudgelingException("Unknown source extension " + quote(extension) + " for file " + quote(src_file) + ", and so judgeling does not know how to prepare it to be runnable.")
 
     # "run" and "artifact" let a language compile to something other than a single
     # directly-executable binary (e.g. Java's javac produces a .class run via `java -cp`).
@@ -758,12 +735,12 @@ def determine_checking_mechanism(
     referential_solutions: list[Solution],
     solutions: list[Solution],
 ) -> Mechanism | None:
-    if checker and len(checker) >= 1:
-        if referential_solutions and len(referential_solutions) >= 1:
+    if checker:
+        if referential_solutions:
             return Mechanism.checker
         if solutions and len(solutions) >= 2:
             return Mechanism.cross_check
-    if judge and len(judge) >= 1:
+    if judge:
         return Mechanism.judge
     return None
 
@@ -778,12 +755,7 @@ def validate_testcases(validators: list[Program], datasets: list[Dataset]) -> bo
                 if validators:
                     for validator in validators:
                         if validator.run([], testcase.input) != 0:
-                            logger.error(
-                                "Testcase "
-                                + quote(dataset.name + "/" + testcase.name)
-                                + " is INVALID, according to validator "
-                                + quote(validator.name)
-                            )
+                            logger.error("Testcase " + quote(dataset.name + "/" + testcase.name) + " is INVALID, according to validator " + quote(validator.name))
                             return False
         logger.info("All testcases were validated successfully")
     return True

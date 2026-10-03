@@ -1,7 +1,7 @@
 [project]
 name = "judgeling"
-version = "0.1.0"
-description = "CLI tool for testing algorithm solutions against problem definitions"
+version = "0.1.6"
+description = "Minimalistic tool to manage problem packages for competitive programming"
 readme = "README.md"
 requires-python = ">=3.14"
 # judgeling.py intentionally depends only on the Python standard library.
@@ -34,4 +34,5 @@ typeCheckingMode = "standard"
 
 [tool.ruff]
 target-version = "py314"
-line-length = 120
+# Effectively unbounded so `ruff format` never wraps lines.
+line-length = 9999

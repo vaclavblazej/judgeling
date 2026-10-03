@@ -1,7 +1,6 @@
 build/
 tmp/
 data/
-*.pdf
 config_local.json
 .venv/
 *.pyc
