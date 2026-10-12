@@ -112,7 +112,10 @@ def main() -> int:
     if problem_query is None and exists(join(working_directory, conf["def_file"])):
         problem_query = working_directory
     if problem_query is None:
-        logger.error("Problem ID was not supplied! Add -P <problem location/id> argument.")
+        if len(argv) == 1:
+            parser.print_help()
+        else:
+            logger.error("Problem ID was not supplied! Add -P <problem location/id> argument.")
         return SUCCESSFULL_EXECUTION
 
     problem_folder = find_problem_folder(problem_query)
@@ -142,13 +145,6 @@ def main() -> int:
             logger.error("Supplied solution file does not exist: " + quote(solution_path))
             return USER_ERROR
 
-    if not solutions:
-        if exists(problem_def_path):
-            logger.verbose("Problem information contained in: " + problem_def_path)
-            print_file_contents(problem_def_path)
-        logger.info("To test your solution, add -S <solution_file> to the arguments.")
-        return SUCCESSFULL_EXECUTION
-
     for solution in solutions:
         solution.compile()
 
@@ -177,6 +173,12 @@ def main() -> int:
 
     mechanism = determine_checking_mechanism(judges, checkers, referential_solutions, solutions)
     if not mechanism:
+        if not solutions:
+            if exists(problem_def_path):
+                logger.verbose("Problem information contained in: " + problem_def_path)
+                print_file_contents(problem_def_path)
+            logger.info("To test your solution, add -S <solution_file> to the arguments.")
+            return SUCCESSFULL_EXECUTION
         logger.critical("There is no checking mechanism!")
         logger.critical("This is an issue with the problem definition, contact the author.")
         logger.critical('To fix this: create either a "judge" or "checker and referential solution"')
@@ -240,7 +242,11 @@ def main() -> int:
             logger.info("Dataset " + dataset.name)
             for testcase in dataset.testcases:
                 logger.info("Testcase: " + quote(testcase.name))
-                referential_solutions[0].run([], testcase.input, testcase.correct_output)
+                try:
+                    referential_solutions[0].run([], testcase.input, testcase.correct_output, conf["time_limit_seconds"])
+                except subprocess.TimeoutExpired:
+                    logger.critical("Referential solution " + quote(referential_solutions[0].name) + " timed out on testcase " + quote(testcase.name) + ", contact the problem setter about this issue.")
+                    return PROBLEM_ERROR
         solutions.extend(referential_solutions)
         logger.info("Referential outputs obtained succesfully")
 
@@ -336,7 +342,7 @@ def main() -> int:
                         logger.info("Referential output:")
                         print_file_contents(testcase.correct_output)
     logger.info("Summary")
-    for solution in solutions:
+    for solution in sorted(solutions, key=lambda s: s.timer.get_total()):
         res_string = ""
         if len(solution.bad_testcases) != 0:
             res_string = "Errors in " + (" ".join([x.str() for x in solution.bad_testcases]))
