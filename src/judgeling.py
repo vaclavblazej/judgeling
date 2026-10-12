@@ -145,8 +145,12 @@ def main() -> int:
             logger.error("Supplied solution file does not exist: " + quote(solution_path))
             return USER_ERROR
 
-    for solution in solutions:
-        solution.compile()
+    try:
+        for solution in solutions:
+            solution.compile()
+    except JudgelingException as e:
+        logger.critical(str(e))
+        return USER_ERROR
 
     file_structure = conf["file_structure"]
     generators = get_file_or_folder(problem_folder, file_structure["generator"], Generator)
@@ -156,6 +160,12 @@ def main() -> int:
     referential_solutions = get_file_or_folder(problem_folder, file_structure["solution"], Solution)
     # compares one solution against referential solution if it is correct
     checkers = get_file_or_folder(problem_folder, file_structure["checker"])
+    if len(judges) > 1:
+        logger.warning("Found " + str(len(judges)) + " judges, only " + quote(judges[0].name) + " will be used.")
+    if len(checkers) > 1:
+        logger.warning("Found " + str(len(checkers)) + " checkers, only " + quote(checkers[0].name) + " will be used.")
+    if len(painters) > 1:
+        logger.warning("Found " + str(len(painters)) + " painters, only " + quote(painters[0].name) + " will be used.")
 
     logger.verbose("This problem has:")
     if generators:
@@ -233,6 +243,14 @@ def main() -> int:
             referential_solutions = solutions[:1]
             solutions = solutions[1:]
             logger.info("Picked solution " + quote(referential_solutions[0].name) + " as a referential solution")
+        else:
+            main_reference = pick_main_reference(referential_solutions)
+            if solutions:
+                logger.verbose("Solutions were supplied, only running main reference " + quote(main_reference.name) + " (skipping other referential solutions)")
+                referential_solutions = [main_reference]
+            else:
+                logger.verbose("Using " + quote(main_reference.name) + " as the main reference solution")
+                referential_solutions = [main_reference] + [s for s in referential_solutions if s is not main_reference]
         logger.info("Running referential solution to get referential outputs")
         for ref in referential_solutions:
             ref.compile()
@@ -451,8 +469,9 @@ class Generator(Program):
             file_location = join(self.data_folder, filename)
             if len(filename) > 3 and filename.endswith(conf["out_ext"]):
                 os.remove(file_location)
-        hash_src.save()
         run_return_code = self.run([str(seed), self.data_folder])
+        if run_return_code == 0:
+            hash_src.save()
         return run_return_code
 
 
@@ -465,7 +484,6 @@ class Testcase:
         self.name = bare_filename(self.input)
         self.correct_output = join(dirname(testcase_input_file), self.name + conf["out_ext"])
         self.drawing = join(dirname(testcase_input_file), self.name)
-        self.valid = True
 
 
 class Dataset:
@@ -693,7 +711,7 @@ def print_file_contents(file_name: str, number_of_lines: int = 20) -> None:
     with open(file_name, "r") as lines:
         count = 1
         for line in lines:
-            if len(line[121:122]) == 0:
+            if len(line) <= 121:
                 print_line = line
             else:
                 print_line = line[:100] + "...<more characters>\n"
@@ -735,6 +753,13 @@ def hash_file(file_location: str) -> str:
 # == Core Script Logic Chunks ====================================================
 
 
+def pick_main_reference(referential_solutions: list[Solution]) -> Solution:
+    """Picks the canonical referential solution by name (one named "ref" or prefixed "ref_"), falling back to the alphabetically first so the choice stays deterministic rather than depending on filesystem glob order."""
+    named_candidates = [s for s in referential_solutions if s.name == "ref" or s.name.startswith("ref_")]
+    candidates = named_candidates or referential_solutions
+    return min(candidates, key=lambda s: s.name)
+
+
 def determine_checking_mechanism(
     judge: list[Program],
     checker: list[Program],
@@ -758,11 +783,10 @@ def validate_testcases(validators: list[Program], datasets: list[Dataset]) -> bo
         logger.info("Testing validity of testcases")
         for dataset in datasets:
             for testcase in dataset.testcases:
-                if validators:
-                    for validator in validators:
-                        if validator.run([], testcase.input) != 0:
-                            logger.error("Testcase " + quote(dataset.name + "/" + testcase.name) + " is INVALID, according to validator " + quote(validator.name))
-                            return False
+                for validator in validators:
+                    if validator.run([], testcase.input) != 0:
+                        logger.error("Testcase " + quote(dataset.name + "/" + testcase.name) + " is INVALID, according to validator " + quote(validator.name))
+                        return False
         logger.info("All testcases were validated successfully")
     return True
 
@@ -775,3 +799,6 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print()
         logger.critical("Manually interrupted!")
+    except JudgelingException as e:
+        logger.critical(str(e))
+        exit(PROBLEM_ERROR)

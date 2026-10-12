@@ -1,6 +1,6 @@
 {
     "def_file": "def.toml",
-    "statistics_file_name": "time.cvs",
+    "statistics_file_name": "time.csv",
     "manual_testcases_folder_name": "_manual",
     "problem_tmp_folder": ".tmp",
     "extensions": [".cpp", ".py", ".sh"],
