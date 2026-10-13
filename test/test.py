@@ -288,6 +288,95 @@ class TestCall(unittest.TestCase):
         self.assertIn("Picked solution", stderr)
         self.assertIn("WA", stderr)
 
+    # == configurable judge/checker invocation ========================================
+
+    def test_custom_validator_success_code_is_honored(self):
+        # fixtures/custom_validator_problem's validator always exits 7, never 0; with the
+        # old hardcoded "!= 0" check this would be wrongly rejected as an invalid testcase
+        self.assertEqual(
+            run(
+                [
+                    "-P",
+                    "fixtures/custom_validator_problem",
+                    "-S",
+                    "fixtures/wrong_solution.cpp",
+                    "-q",
+                ]
+            ),
+            judgeling.SUCCESSFULL_EXECUTION,
+        )
+
+    def test_kattis_style_judge_accepts_correct_solution(self):
+        # fixtures/kattis_judge_problem's judge is invoked Kattis-style: input/answer/
+        # feedback_dir as argv, solution output on stdin, exit 42=AC/43=WA; {answer} is
+        # produced by running the fixture's own referential solution (sol/ref.cpp)
+        return_code, stderr = run_capturing_stderr(
+            [
+                "-P",
+                "fixtures/kattis_judge_problem",
+                "-S",
+                "fixtures/kattis_judge_problem/sol/ref.cpp",
+            ]
+        )
+        self.assertEqual(return_code, judgeling.SUCCESSFULL_EXECUTION)
+        self.assertNotIn("WA", stderr)
+
+    def test_kattis_style_judge_flags_wrong_solution(self):
+        return_code, stderr = run_capturing_stderr(["-P", "fixtures/kattis_judge_problem", "-S", "fixtures/wrong_solution.cpp"])
+        self.assertEqual(return_code, judgeling.SUCCESSFULL_EXECUTION)
+        self.assertIn("WA", stderr)
+
+    def test_default_comparator_accepts_correct_solution(self):
+        # fixtures/default_comparator_problem has a referential solution but no judge or
+        # checker, so determine_checking_mechanism() must fall back to Mechanism.default_comparator
+        return_code, stderr = run_capturing_stderr(
+            [
+                "-P",
+                "fixtures/default_comparator_problem",
+                "-S",
+                "fixtures/default_comparator_problem/sol/ref.cpp",
+            ]
+        )
+        self.assertEqual(return_code, judgeling.SUCCESSFULL_EXECUTION)
+        self.assertNotIn("WA", stderr)
+
+    def test_default_comparator_flags_wrong_solution(self):
+        return_code, stderr = run_capturing_stderr(["-P", "fixtures/default_comparator_problem", "-S", "fixtures/wrong_solution.cpp"])
+        self.assertEqual(return_code, judgeling.SUCCESSFULL_EXECUTION)
+        self.assertIn("WA", stderr)
+
+    # == static/committed dataset directories =========================================
+
+    def test_static_dataset_and_generator_output_dir_are_both_used(self):
+        # fixtures/static_dataset_problem has a committed sample_data (static_datasets)
+        # and a generator redirected to write into committed secret_data
+        # (generator_output_dirs), alongside a hand-written testcase that must survive
+        secret_hand_written = "fixtures/static_dataset_problem/secret_data/000.in"
+        secret_generated = "fixtures/static_dataset_problem/secret_data/100.in"
+        self.assertTrue(os.path.exists(secret_hand_written))
+        try:
+            return_code, stderr = run_capturing_stderr(
+                [
+                    "-P",
+                    "fixtures/static_dataset_problem",
+                    "-S",
+                    "fixtures/wrong_solution.cpp",
+                ]
+            )
+            self.assertEqual(return_code, judgeling.SUCCESSFULL_EXECUTION)
+            self.assertIn("Dataset sample_data", stderr)
+            self.assertIn("Dataset secret_data", stderr)
+            # the generator must not have deleted the hand-written secret testcase
+            self.assertTrue(os.path.exists(secret_hand_written))
+            # and must have actually produced its own testcase in the same committed folder
+            self.assertTrue(os.path.exists(secret_generated))
+        finally:
+            if os.path.exists(secret_generated):
+                os.remove(secret_generated)
+            hash_file = "fixtures/static_dataset_problem/secret_data/gen.hash"
+            if os.path.exists(hash_file):
+                os.remove(hash_file)
+
     # == return codes ================================================================
 
 

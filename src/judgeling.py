@@ -30,6 +30,8 @@ USER_ERROR = 1  # argument format is fine, but content is wrong
 PROBLEM_ERROR = 2  # content of problem definition is wrong
 INVALID_ARGUMENT = 129  # argument format is wrong
 
+ROOT_CONFIG_FILE = "judgeling_root.json"  # fixed name: it bootstraps config loading itself, so it can't be configurable
+
 VERBOSE_LEVEL = 15
 QUIET_LEVEL = 60
 
@@ -93,6 +95,11 @@ def main() -> int:
     setup_logging()
     conf.update(load_configuration(global_config_folder))
     conf.update(load_configuration(local_config_folder))
+    repo_root_config = find_repo_root_config(working_directory)
+    if repo_root_config:
+        conf.update(load_configuration(repo_root_config))
+        global problem_search_location
+        problem_search_location = join(dirname(repo_root_config), conf.get("problem_search_subdir", "problems"))
     global args
     args = parser.parse_args()
     if args.logging_level:
@@ -118,10 +125,12 @@ def main() -> int:
             logger.error("Problem ID was not supplied! Add -P <problem location/id> argument.")
         return SUCCESSFULL_EXECUTION
 
-    problem_folder = find_problem_folder(problem_query)
-    if not problem_folder:
+    found_problem_folder = find_problem_folder(problem_query)
+    if not found_problem_folder:
         logger.error("Unable to locate the problem definition file for " + quote(problem_query))
         return USER_ERROR
+    global problem_folder
+    problem_folder = found_problem_folder
     problem_def_path = join(problem_folder, conf["def_file"])
     if not exists(problem_def_path):
         logger.warning("Problem found locally, but is missing a definition file: " + quote(problem_folder))
@@ -225,6 +234,8 @@ def main() -> int:
                 return PROBLEM_ERROR
 
         datasets = [Dataset(g.data_folder) for g in generators]
+        for static_dir in conf.get("static_datasets", []):
+            datasets.append(Dataset(join(problem_folder, static_dir)))
         if args.dataset_regex:
             datasets = [d for d in datasets if search(args.dataset_regex, d.name)]
 
@@ -238,7 +249,9 @@ def main() -> int:
         if judges:
             for judge in judges:
                 judge.compile()
-    elif mechanism in [Mechanism.checker, Mechanism.cross_check]:
+        if referential_solutions:
+            referential_solutions = [pick_main_reference(referential_solutions)]
+    elif mechanism in [Mechanism.checker, Mechanism.cross_check, Mechanism.default_comparator]:
         if mechanism == Mechanism.cross_check:
             referential_solutions = solutions[:1]
             solutions = solutions[1:]
@@ -251,11 +264,17 @@ def main() -> int:
             else:
                 logger.verbose("Using " + quote(main_reference.name) + " as the main reference solution")
                 referential_solutions = [main_reference] + [s for s in referential_solutions if s is not main_reference]
+        for checker in checkers:
+            checker.compile()
+
+    # judge mode only needs a model answer when it has a referential solution to produce one from
+    # (e.g. a Kattis-style custom judge that takes an {answer} placeholder); cross_check/checker/
+    # default_comparator always need one, since determine_checking_mechanism() guarantees referential_solutions for them.
+    needs_reference_output = mechanism in [Mechanism.checker, Mechanism.cross_check, Mechanism.default_comparator] or (mechanism == Mechanism.judge and referential_solutions)
+    if needs_reference_output:
         logger.info("Running referential solution to get referential outputs")
         for ref in referential_solutions:
             ref.compile()
-        for checker in checkers:
-            checker.compile()
         for dataset in datasets:
             logger.info("Dataset " + dataset.name)
             for testcase in dataset.testcases:
@@ -265,7 +284,8 @@ def main() -> int:
                 except subprocess.TimeoutExpired:
                     logger.critical("Referential solution " + quote(referential_solutions[0].name) + " timed out on testcase " + quote(testcase.name) + ", contact the problem setter about this issue.")
                     return PROBLEM_ERROR
-        solutions.extend(referential_solutions)
+        if mechanism != Mechanism.judge:
+            solutions.extend(referential_solutions)
         logger.info("Referential outputs obtained succesfully")
 
     if painters:
@@ -291,6 +311,9 @@ def main() -> int:
         else:
             logger.info("Available painter, add --draw flag to allow painter to draw testcases (can take a long time).")
 
+    feedback_dir = join(data_path, "feedback")
+    os.makedirs(feedback_dir, exist_ok=True)
+
     logger.info("Running datasets on solutions")
     for dataset in datasets:
         logger.info("Dataset " + dataset.name)
@@ -303,7 +326,7 @@ def main() -> int:
                 break
             logger.info("Testcase: " + quote(testcase.name))
             for solution in viable_solutions:
-                solution_out_dir = join(dataset.data_folder, "sol", solution.name)
+                solution_out_dir = join(data_path, dataset.name, "sol", solution.name)
                 os.makedirs(solution_out_dir, exist_ok=True)
                 solution_testcase_out = join(solution_out_dir, testcase.name + conf["out_ext"])
                 time_result_file = join(solution_out_dir, conf["statistics_file_name"])
@@ -328,12 +351,20 @@ def main() -> int:
                     result = Result.TIMELIMIT_EXCEEDED
                     solution.disqualified = True
                 if result == Result.DEFAULT_FLAG:
-                    result_num = Result.BAD_INVOCATION.num  # defensive default; every real mechanism overrides it below
+                    placeholders = {
+                        "input": testcase.input,
+                        "answer": testcase.correct_output,
+                        "solution_output": solution_testcase_out,
+                        "feedback_dir": feedback_dir,
+                    }
                     if mechanism == Mechanism.judge:
-                        result_num = judges[0].run([testcase.input, solution_testcase_out])
+                        result = run_checking_program(judges[0], conf["judge_invocation"], placeholders)
                     elif mechanism in [Mechanism.checker, Mechanism.cross_check]:
-                        result_num = checkers[0].run([testcase.correct_output, solution_testcase_out])
-                    result = Result.from_num(result_num)
+                        result = run_checking_program(checkers[0], conf["checker_invocation"], placeholders)
+                    elif mechanism == Mechanism.default_comparator:
+                        result = token_diff(testcase.correct_output, solution_testcase_out, conf["default_comparator"])
+                    else:
+                        result = Result.BAD_INVOCATION
                 if result == Result.OK:
                     logger.verbose(solution.name + " OK")
                 elif result in [
@@ -356,7 +387,7 @@ def main() -> int:
                     print_file_contents(testcase.input)
                     logger.info("Output:")
                     print_file_contents(solution_testcase_out)
-                    if mechanism in [Mechanism.checker, Mechanism.cross_check]:
+                    if mechanism in [Mechanism.checker, Mechanism.cross_check, Mechanism.default_comparator]:
                         logger.info("Referential output:")
                         print_file_contents(testcase.correct_output)
     logger.info("Summary")
@@ -455,7 +486,8 @@ class Generator(Program):
 
     def __init__(self, generator_file: str):
         super().__init__(generator_file)
-        self.data_folder = join(data_path, self.name)
+        override = conf.get("generator_output_dirs", {}).get(self.name)
+        self.data_folder = join(problem_folder, override) if override else join(data_path, self.name)
 
     def generate(self) -> int:
         os.makedirs(self.data_folder, exist_ok=True)
@@ -491,7 +523,7 @@ class Dataset:
 
     def __init__(self, dataset_folder: str):
         self.name = basename(dataset_folder)
-        self.data_folder = join(data_path, self.name)
+        self.data_folder = dataset_folder
         self.testcases: list[Testcase] = []
 
     def get_testcases(self, testcase_regex: str | None) -> None:
@@ -566,6 +598,7 @@ class Mechanism(enum.Enum):
     judge = "judge"  # it can decide whether the output is correct or not
     checker = "checker"  # have referential solution and the solutions will be compared to it
     cross_check = "cross_check"  # more user's solutions run against each other
+    default_comparator = "default_comparator"  # no judge/checker, but a referential solution exists: fall back to a built-in token diff
 
 
 class Result(enum.Enum):
@@ -601,6 +634,19 @@ def setup_logging() -> None:
     formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
     handler.setFormatter(formatter)
     logger.addHandler(handler)
+
+
+def find_repo_root_config(start_dir: str) -> str | None:
+    """Walks up from start_dir looking for a judgeling_root.json marking an external repo's root."""
+    current = realpath(start_dir)
+    while True:
+        candidate = join(current, ROOT_CONFIG_FILE)
+        if exists(candidate):
+            return candidate
+        parent = dirname(current)
+        if parent == current:
+            return None
+        current = parent
 
 
 def load_configuration(config_file_location: str) -> dict[str, Any]:
@@ -773,7 +819,30 @@ def determine_checking_mechanism(
             return Mechanism.cross_check
     if judge:
         return Mechanism.judge
+    if referential_solutions:
+        return Mechanism.default_comparator
     return None
+
+
+def run_checking_program(program: Program, template: dict[str, Any], placeholders: dict[str, str]) -> Result:
+    """Runs a judge/checker program according to its invocation template, mapping its exit code to a Result."""
+    args = [substitute(a, placeholders) for a in template.get("args", [])]
+    stdin_template = template.get("stdin")
+    stdin_file = substitute(stdin_template, placeholders) if stdin_template else None
+    code = program.run(args, stdin_file)
+    result_name = template.get("result_codes", {}).get(str(code))
+    return Result[result_name] if result_name else Result.BAD_INVOCATION
+
+
+def token_diff(expected_file: str, actual_file: str, flags: dict[str, Any]) -> Result:
+    """Built-in fallback comparator: compares two files by whitespace-separated tokens (Kattis-style default diff)."""
+    with open(expected_file) as ef, open(actual_file) as af:
+        expected, actual = ef.read(), af.read()
+    if not flags.get("case_sensitive", False):
+        expected, actual = expected.lower(), actual.lower()
+    exp_tokens = expected.splitlines() if flags.get("space_change_sensitive", False) else expected.split()
+    act_tokens = actual.splitlines() if flags.get("space_change_sensitive", False) else actual.split()
+    return Result.OK if exp_tokens == act_tokens else Result.WRONG_ANSWER
 
 
 def validate_testcases(validators: list[Program], datasets: list[Dataset]) -> bool:
@@ -784,7 +853,7 @@ def validate_testcases(validators: list[Program], datasets: list[Dataset]) -> bo
         for dataset in datasets:
             for testcase in dataset.testcases:
                 for validator in validators:
-                    if validator.run([], testcase.input) != 0:
+                    if validator.run([], testcase.input) != conf["validator_success_code"]:
                         logger.error("Testcase " + quote(dataset.name + "/" + testcase.name) + " is INVALID, according to validator " + quote(validator.name))
                         return False
         logger.info("All testcases were validated successfully")

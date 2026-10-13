@@ -219,3 +219,6 @@ add generator parameters to enable:
 * supplying inputs online
 * ? option to define dataset size ?
 simplification of testcases to find small bad testcase - 'min' program
+solution-folder expected-verdict labeling (e.g. submissions/{accepted,wrong_answer,time_limit_exceeded,...}/*):
+cross-check each solution's actual result against the verdict implied by its subfolder,
+instead of just running every supplied solution the same way

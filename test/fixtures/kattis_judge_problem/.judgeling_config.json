@@ -1,0 +1,8 @@
+{
+    "time_limit_seconds": 3,
+    "judge_invocation": {
+        "args": ["{input}", "{answer}", "{feedback_dir}"],
+        "stdin": "{solution_output}",
+        "result_codes": {"42": "OK", "43": "WRONG_ANSWER"}
+    }
+}

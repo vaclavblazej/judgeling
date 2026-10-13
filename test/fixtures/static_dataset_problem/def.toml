@@ -1,0 +1,3 @@
+name = "static/committed dataset fixture"
+input = "N then N integers"
+output = "exercises static_datasets (sample_data, hand-authored, never touched by judgeling) and generator_output_dirs (secret_data, a generator writes alongside a hand-written testcase that must survive)"

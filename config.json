@@ -33,5 +33,25 @@
         "solution": "sol",
         "checker": "chk"
     },
-    "time_limit_seconds": 30
+    "time_limit_seconds": 30,
+
+    "problem_search_subdir": "problems",
+    "static_datasets": [],
+    "generator_output_dirs": {},
+
+    "validator_success_code": 0,
+
+    "judge_invocation": {
+        "args": ["{input}", "{solution_output}"],
+        "result_codes": {"0": "OK", "1": "WRONG_ANSWER", "2": "PRESENTATION_ERROR"}
+    },
+    "checker_invocation": {
+        "args": ["{answer}", "{solution_output}"],
+        "result_codes": {"0": "OK", "1": "WRONG_ANSWER", "2": "PRESENTATION_ERROR"}
+    },
+
+    "default_comparator": {
+        "case_sensitive": false,
+        "space_change_sensitive": false
+    }
 }

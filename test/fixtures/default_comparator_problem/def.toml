@@ -1,0 +1,3 @@
+name = "default comparator fixture"
+input = "N then N integers"
+output = "the integers sorted; no judge or checker exists, so this falls back to the built-in token-diff comparator against the referential solution"

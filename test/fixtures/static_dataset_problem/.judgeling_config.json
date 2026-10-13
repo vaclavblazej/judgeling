@@ -1,0 +1,5 @@
+{
+    "time_limit_seconds": 3,
+    "static_datasets": ["sample_data"],
+    "generator_output_dirs": {"gen": "secret_data"}
+}
