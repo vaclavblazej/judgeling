@@ -38,6 +38,8 @@
     "problem_search_subdir": "problems",
     "static_datasets": [],
     "generator_output_dirs": {},
+    "auto_solutions": [],
+    "stop_on_failure": true,
 
     "validator_success_code": 0,
 

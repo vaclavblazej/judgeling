@@ -74,6 +74,7 @@ parser.add_argument("--seed", dest="seed", help="provide a rng seed for dataset 
 parser.add_argument("--draw", dest="draw", action="store_true", help="create drawings of testcases using the pic program")
 parser.add_argument("--input", dest="input", nargs="+", help="supply input data files manually")
 parser.add_argument("-g", "--force-gen", dest="force_generation", action="store_true", help="force the data generators to run again")
+parser.add_argument("-k", "--keep-going", dest="keep_going", action="store_true", help="keep running a solution on later testcases even after it has failed once (overrides the stop_on_failure config)")
 parser.add_argument("-q", "--quiet", dest="logging_level", const=QUIET_LEVEL, action="store_const", help="no logging will be shown")
 parser.add_argument("-v", "--verbose", dest="logging_level", const=VERBOSE_LEVEL, action="store_const", help="more detailed info about testing")
 parser.add_argument("-d", "--debug", dest="logging_level", const=logging.DEBUG, action="store_const", help="very detailed logging of script's inner workings")
@@ -154,6 +155,11 @@ def main() -> int:
             logger.error("Supplied solution file does not exist: " + quote(solution_path))
             return USER_ERROR
 
+    if args.solution is None:
+        for auto_solution_location in conf.get("auto_solutions", []):
+            solutions.extend(get_file_or_folder(problem_folder, auto_solution_location, Solution))
+        solutions.sort(key=lambda s: s.source_file)
+
     try:
         for solution in solutions:
             solution.compile()
@@ -226,7 +232,7 @@ def main() -> int:
         datasets = [Dataset(manual_input_folder)]
     else:
         if args.dataset_regex:
-            generators = [g for g in generators if search(args.dataset_regex, g.name)]
+            generators = [g for g in generators if search(args.dataset_regex, basename(g.data_folder))]
         for generator in generators:
             logger.debug("Generator output folder: " + generator.data_folder)
             if generator.generate() != 0:
@@ -239,6 +245,7 @@ def main() -> int:
         if args.dataset_regex:
             datasets = [d for d in datasets if search(args.dataset_regex, d.name)]
 
+    datasets.sort(key=lambda d: d.name)
     for dataset in datasets:
         dataset.get_testcases(args.testcase_regex)
 
@@ -314,6 +321,7 @@ def main() -> int:
     feedback_dir = join(data_path, "feedback")
     os.makedirs(feedback_dir, exist_ok=True)
 
+    stop_on_failure = conf.get("stop_on_failure", True) and not args.keep_going
     logger.info("Running datasets on solutions")
     for dataset in datasets:
         logger.info("Dataset " + dataset.name)
@@ -345,11 +353,9 @@ def main() -> int:
                         print_file_contents(solution_testcase_out)
                         logger.info("<<<")
                         result = Result.RUNTIME_ERROR
-                        solution.disqualified = True
                 except subprocess.TimeoutExpired:
                     solution.timer.stop()
                     result = Result.TIMELIMIT_EXCEEDED
-                    solution.disqualified = True
                 if result == Result.DEFAULT_FLAG:
                     placeholders = {
                         "input": testcase.input,
@@ -365,31 +371,31 @@ def main() -> int:
                         result = token_diff(testcase.correct_output, solution_testcase_out, conf["default_comparator"])
                     else:
                         result = Result.BAD_INVOCATION
-                if result == Result.OK:
-                    logger.verbose(solution.name + " OK")
-                elif result in [
+                if result == Result.BAD_INVOCATION:
+                    logger.critical("The testing program returned a code for bad invocation. This means judgeling did not manage to run this program correctly. " + quote(mechanism) + " is probably writen incorrectly. If you think this is not the case, contact judgeling developers.")
+                    return PROBLEM_ERROR
+                elif result not in [
+                    Result.OK,
                     Result.WRONG_ANSWER,
                     Result.PRESENTATION_ERROR,
                     Result.RUNTIME_ERROR,
                     Result.TIMELIMIT_EXCEEDED,
                 ]:
-                    logger.error(solution.name + " " + result.short_string)
-                elif result == Result.BAD_INVOCATION:
-                    logger.critical("The testing program returned a code for bad invocation. This means judgeling did not manage to run this program correctly. " + quote(mechanism) + " is probably writen incorrectly. If you think this is not the case, contact judgeling developers.")
-                    return PROBLEM_ERROR
-                else:
                     logger.error(quote(mechanism.name) + " gave an invalid return code: " + str(result))
                     return PROBLEM_ERROR
+                logger.info(solution.name + " " + testcase.dataset.name + "/" + testcase.name + ": " + colorize(result.short_string, result.color))
                 if result != Result.OK:
                     # todo split results depending on retun code, and report correct error messages in summary
                     solution.bad_testcases.append(BadTestResult(testcase, result))
-                    logger.info("Input:")
-                    print_file_contents(testcase.input)
-                    logger.info("Output:")
-                    print_file_contents(solution_testcase_out)
+                    if stop_on_failure:
+                        solution.disqualified = True
+                    logger.verbose("Input:")
+                    print_file_contents(testcase.input, level=VERBOSE_LEVEL)
+                    logger.verbose("Output:")
+                    print_file_contents(solution_testcase_out, level=VERBOSE_LEVEL)
                     if mechanism in [Mechanism.checker, Mechanism.cross_check, Mechanism.default_comparator]:
-                        logger.info("Referential output:")
-                        print_file_contents(testcase.correct_output)
+                        logger.verbose("Referential output:")
+                        print_file_contents(testcase.correct_output, level=VERBOSE_LEVEL)
     logger.info("Summary")
     for solution in sorted(solutions, key=lambda s: s.timer.get_total()):
         res_string = ""
@@ -425,6 +431,10 @@ def quote(to_print: object) -> str:
     return "“" + str(to_print) + "”"  # requires UTF-8
 
 
+def colorize(text: str, color: str) -> str:
+    return "\033[0;" + color + "m" + text + "\033[0m"
+
+
 # == Structure ===================================================================
 
 
@@ -457,16 +467,15 @@ class Program:
             logger.debug("Timeout: " + str(timeout))
         with (
             open(input_file) if input_file else contextlib.nullcontext() as in_file,
-            open(output_file, "w") if output_file else contextlib.nullcontext() as out_file,
+            open(output_file, "w") if output_file else open(os.devnull, "w") as out_file,
         ):
-            p = subprocess.Popen(command, stdin=in_file, stdout=out_file)
+            p = subprocess.Popen(command, stdin=in_file, stdout=out_file, stderr=subprocess.DEVNULL)
             try:
                 p.wait(timeout)
             except subprocess.TimeoutExpired:
                 p.kill()
                 raise
-            if out_file:
-                out_file.flush()
+            out_file.flush()
         logger.debug("Program run returns: " + str(p.returncode))
         return p.returncode
 
@@ -604,18 +613,19 @@ class Mechanism(enum.Enum):
 class Result(enum.Enum):
     """Outcome of checking a solution's output on one testcase, with its numeric code and long/short display strings."""
 
-    OK = (0, "OK", "OK")
-    WRONG_ANSWER = (1, "WRONG ANSWER", "WA")
-    PRESENTATION_ERROR = (2, "PRESENTATION ERROR", "PE")
-    TIMELIMIT_EXCEEDED = (3, "TIMELIMIT EXCEEDED", "TLE")
-    RUNTIME_ERROR = (4, "RUNTIME ERROR", "RE")
-    BAD_INVOCATION = (43, "BAD INVOCATION", "BAD")
-    DEFAULT_FLAG = (88, "DEFAULT", "DEF")
+    OK = (0, "OK", "OK", "32")
+    WRONG_ANSWER = (1, "WRONG ANSWER", "WA", "31")
+    PRESENTATION_ERROR = (2, "PRESENTATION ERROR", "PE", "33")
+    TIMELIMIT_EXCEEDED = (3, "TIMELIMIT EXCEEDED", "TLE", "31")
+    RUNTIME_ERROR = (4, "RUNTIME ERROR", "RE", "31")
+    BAD_INVOCATION = (43, "BAD INVOCATION", "BAD", "31")
+    DEFAULT_FLAG = (88, "DEFAULT", "DEF", "0")
 
-    def __init__(self, num: int, long_string: str, short_string: str):
+    def __init__(self, num: int, long_string: str, short_string: str, color: str):
         self.num = num
         self.short_string = short_string
         self.long_string = long_string
+        self.color = color
 
     @staticmethod
     def from_num(num: int) -> Result | None:
@@ -751,8 +761,8 @@ def find_problem_folder(problem_query: str) -> str | None:
     return None
 
 
-def print_file_contents(file_name: str, number_of_lines: int = 20) -> None:
-    if conf["logging_level"] >= QUIET_LEVEL:
+def print_file_contents(file_name: str, number_of_lines: int = 20, level: int = logging.INFO) -> None:
+    if conf["logging_level"] > level:
         return
     with open(file_name, "r") as lines:
         count = 1

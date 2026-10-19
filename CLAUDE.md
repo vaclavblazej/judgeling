@@ -15,6 +15,8 @@ python3 src/judgeling.py -P <problem_path_or_id> -S solution1.cpp [solution2.cpp
 
 Filter datasets/testcases with regex: `-D <regex>` and `-T <regex>`
 
+By default a solution is disqualified from the rest of a dataset's testcases after its first non-OK result (config `stop_on_failure`, default `true`); pass `-k`/`--keep-going` to keep running it on later testcases anyway.
+
 Run tests (from the `test/` directory — paths inside `test.py` are relative, so `cd test` first):
 ```bash
 cd test && python3 test.py
@@ -34,24 +36,24 @@ The git pre-commit hook (`.pre-commit-config.yaml`) only runs `ruff format` on c
 
 ## Architecture
 
-The entire tool is a single file `src/judgeling.py` (intentionally kept under 1000 lines — this is a hard constraint, not a suggestion; if a change would push it over, look for something to cut or simplify rather than accepting the growth). Configuration lives in `config.json` (global, at the repo root) and optional `config_local.json` (local overrides, also at the repo root). Per-problem overrides go in `<problem>/.judgeling_config.json`.
+The entire tool is a single file `src/judgeling.py` (intentionally kept under 1000 lines — this is a hard constraint, not a suggestion; if a change would push it over, look for something to cut or simplify rather than accepting the growth). Configuration lives in `config.json` (global, at the repo root) and optional `config_local.json` (local overrides, also at the repo root). Per-problem overrides go in `<problem>/.judgeling_config.json`. A fourth, optional layer sits in between: if a `judgeling_root.json` is found by walking up from the working directory, its directory's config (also JSON) is loaded and its `problem_search_subdir` (default `"problems"`) overrides where `find_problem_folder()` looks — this lets an external repo (like `acm-problems` or a contest repo) mark its own root without editing `config.json`.
 
 ### Core flow in `main()`
 
-1. Load config chain: `config.json` → `config_local.json` → per-problem `.judgeling_config.json`
-2. Resolve problem folder via `find_problem_folder()` — checks CWD first, then `../acm-problems/problems/` recursively
+1. Load config chain: `config.json` → `config_local.json` → nearest `judgeling_root.json`'s directory config (if any) → per-problem `.judgeling_config.json`
+2. Resolve problem folder via `find_problem_folder()` — checks CWD first, then the configured problem search location (`../acm-problems/problems/` by default, or `<judgeling_root.json dir>/<problem_search_subdir>` if found) recursively
 3. Discover problem components from the file structure config (`gen/`, `val/`, `jud/`, `chk/`, `sol/`, `pic/`)
-4. Determine checking mechanism: **judge** (standalone correctness check), **checker** (compare against referential solution), or **cross_check** (compare user solutions against each other)
+4. Determine checking mechanism: **judge** (standalone correctness check), **checker** (compare against referential solution), **cross_check** (compare user solutions against each other, used when a checker exists but no referential solution does and 2+ `-S` solutions were given), or **default_comparator** (no judge/checker, but a referential solution exists — falls back to a built-in whitespace-token diff)
 5. Generate datasets (with source-hash-based caching to skip unchanged generators)
 6. Validate inputs, run solutions, check outputs, report summary
 
 ### Key classes
 
 - **Program** — base class: wraps a source file, handles compilation and execution
-- **Solution(Program)** — tracks timing (`Timer`) and bad testcases, can be disqualified
+- **Solution(Program)** — tracks timing (`Timer`) and bad testcases; disqualified from a dataset's remaining testcases on its first non-OK result unless `stop_on_failure` is off (config default `true`, or `-k`/`--keep-going`)
 - **Generator(Program)** — generates datasets into `<problem>/.tmp/data/<gen_name>/`, uses `HashFile` to cache
 - **Dataset** / **Testcase** — represent generated test data (`.in`/`.out` file pairs)
-- **Mechanism** enum — `judge`, `checker`, `cross_check`
+- **Mechanism** enum — `judge`, `checker`, `cross_check`, `default_comparator`
 - **Result** enum — `OK(0)`, `WRONG_ANSWER(1)`, `PRESENTATION_ERROR(2)`, `TIMELIMIT_EXCEEDED(3)`, `RUNTIME_ERROR(4)`, `BAD_INVOCATION(43)`
 
 ### Problem definition structure
